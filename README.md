@@ -1,6 +1,6 @@
 # AdventureHub 🏔️
 
-Web aplikacija za ponudu i potražnju outdoor tura i aktivnosti u turizmu.
+Web aplikacija za ponudu i potražnju outdoor tura i aktivnosti u turizmu. 
 
 ## Tehnologije
 - **Frontend:** Next.js 15 (App Router), TypeScript, Tailwind CSS
