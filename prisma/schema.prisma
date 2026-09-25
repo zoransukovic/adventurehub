@@ -1,0 +1,242 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role { TOURIST GUIDE ADMIN }
+enum GuideStatus { PENDING APPROVED REJECTED }
+enum TransportMode { FOOT BIKE CAR ATV KAYAK DIVING OTHER }
+enum DifficultyLevel { EASY MODERATE HARD }
+enum BookingStatus { PENDING CONFIRMED CANCELLED COMPLETED }
+enum TrackingStatus { ACTIVE PAUSED FINISHED SOS }
+enum ConversationType { DIRECT GROUP }
+enum NotificationType { MESSAGE BOOKING_CONFIRMED REMINDER REVIEW_REQUEST PROMO SYSTEM }
+
+model User {
+  id             String       @id @default(cuid())
+  email          String       @unique
+  passwordHash   String
+  fullName       String
+  role           Role         @default(TOURIST)
+  country        String?
+  phone          String?
+  avatarUrl      String?
+  language       String       @default("sr")
+  guideStatus    GuideStatus?
+  guideBio       String?
+  guideCertified Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  toursCreated     Tour[]                    @relation("GuideTours")
+  bookings         Booking[]
+  reviewsWritten   Review[]                  @relation("ReviewAuthor")
+  sentMessages     Message[]                 @relation("MessageSender")
+  conversations    ConversationParticipant[]
+  notifications    Notification[]
+  trackingSessions TrackingSession[]
+  favorites        Favorite[]
+  @@map("users")
+}
+
+model ActivityType {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  nameEn    String?
+  icon      String   @default("mountain")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  tours     Tour[]
+  @@map("activity_types")
+}
+
+model Tour {
+  id              String          @id @default(cuid())
+  title           String
+  descriptionSr   String
+  descriptionEn   String?
+  pricePerPerson  Float
+  maxParticipants Int
+  durationMinutes Int?
+  difficulty      DifficultyLevel @default(MODERATE)
+  transportMode   TransportMode   @default(FOOT)
+  meetingPoint    String?
+  includesItems   String[]        @default([])
+  active          Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  guideId        String
+  guide          User             @relation("GuideTours", fields: [guideId], references: [id])
+  activityTypeId String
+  activityType   ActivityType     @relation(fields: [activityTypeId], references: [id])
+  route          Route?
+  departures     TourDeparture[]
+  bookings       Booking[]
+  reviews        Review[]
+  favorites      Favorite[]
+  @@index([activityTypeId])
+  @@index([guideId])
+  @@map("tours")
+}
+
+model TourDeparture {
+  id        String   @id @default(cuid())
+  tourId    String
+  tour      Tour     @relation(fields: [tourId], references: [id], onDelete: Cascade)
+  startsAt  DateTime
+  spotsLeft Int
+  createdAt DateTime @default(now())
+  bookings         Booking[]
+  trackingSessions TrackingSession[]
+  @@index([tourId])
+  @@map("tour_departures")
+}
+
+model Route {
+  id            String   @id @default(cuid())
+  tourId        String   @unique
+  tour          Tour     @relation(fields: [tourId], references: [id], onDelete: Cascade)
+  creationMode  String
+  startLabel    String?
+  endLabel      String?
+  startLat      Float
+  startLng      Float
+  endLat        Float
+  endLng        Float
+  points        Json
+  distanceKm    Float?
+  elevationGainM Int?
+  estimatedMins  Int?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  @@map("routes")
+}
+
+model Booking {
+  id           String        @id @default(cuid())
+  userId       String
+  user         User          @relation(fields: [userId], references: [id])
+  tourId       String
+  tour         Tour          @relation(fields: [tourId], references: [id])
+  departureId  String
+  departure    TourDeparture @relation(fields: [departureId], references: [id])
+  participants Int           @default(1)
+  status       BookingStatus @default(PENDING)
+  totalPrice   Float
+  createdAt    DateTime      @default(now())
+  review       Review?
+  @@index([userId])
+  @@index([tourId])
+  @@map("bookings")
+}
+
+model TrackingSession {
+  id                String         @id @default(cuid())
+  userId            String
+  user              User           @relation(fields: [userId], references: [id])
+  departureId       String
+  departure         TourDeparture  @relation(fields: [departureId], references: [id])
+  status            TrackingStatus @default(ACTIVE)
+  startedAt         DateTime       @default(now())
+  finishedAt        DateTime?
+  distanceCoveredKm Float          @default(0)
+  currentLat        Float?
+  currentLng        Float?
+  currentSpeedKmh   Float?
+  currentElevationM Int?
+  points            TrackingPoint[]
+  @@index([userId])
+  @@map("tracking_sessions")
+}
+
+model TrackingPoint {
+  id         String          @id @default(cuid())
+  sessionId  String
+  session    TrackingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  lat        Float
+  lng        Float
+  elevation  Int?
+  speedKmh   Float?
+  recordedAt DateTime        @default(now())
+  @@index([sessionId])
+  @@map("tracking_points")
+}
+
+model Conversation {
+  id           String                    @id @default(cuid())
+  type         ConversationType          @default(DIRECT)
+  tourId       String?
+  createdAt    DateTime                  @default(now())
+  participants ConversationParticipant[]
+  messages     Message[]
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id])
+  lastReadAt     DateTime?
+  @@unique([conversationId, userId])
+  @@map("conversation_participants")
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User         @relation("MessageSender", fields: [senderId], references: [id])
+  body           String
+  attachmentUrl  String?
+  createdAt      DateTime     @default(now())
+  @@index([conversationId])
+  @@map("messages")
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  bookingId String   @unique
+  booking   Booking  @relation(fields: [bookingId], references: [id])
+  tourId    String
+  tour      Tour     @relation(fields: [tourId], references: [id])
+  authorId  String
+  author    User     @relation("ReviewAuthor", fields: [authorId], references: [id])
+  rating    Int
+  comment   String?
+  tags      String[] @default([])
+  createdAt DateTime @default(now())
+  @@index([tourId])
+  @@map("reviews")
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  tourId    String
+  tour      Tour     @relation(fields: [tourId], references: [id])
+  createdAt DateTime @default(now())
+  @@unique([userId, tourId])
+  @@map("favorites")
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id])
+  type      NotificationType
+  title     String
+  body      String?
+  linkUrl   String?
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+  @@index([userId])
+  @@map("notifications")
+}
