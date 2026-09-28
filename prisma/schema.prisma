@@ -7,14 +7,61 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role { TOURIST GUIDE ADMIN }
-enum GuideStatus { PENDING APPROVED REJECTED }
-enum TransportMode { FOOT BIKE CAR ATV KAYAK DIVING OTHER }
-enum DifficultyLevel { EASY MODERATE HARD }
-enum BookingStatus { PENDING CONFIRMED CANCELLED COMPLETED }
-enum TrackingStatus { ACTIVE PAUSED FINISHED SOS }
-enum ConversationType { DIRECT GROUP }
-enum NotificationType { MESSAGE BOOKING_CONFIRMED REMINDER REVIEW_REQUEST PROMO SYSTEM }
+enum Role {
+  TOURIST
+  GUIDE
+  ADMIN
+}
+
+enum GuideStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum TransportMode {
+  FOOT
+  BIKE
+  CAR
+  ATV
+  KAYAK
+  DIVING
+  OTHER
+}
+
+enum DifficultyLevel {
+  EASY
+  MODERATE
+  HARD
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum TrackingStatus {
+  ACTIVE
+  PAUSED
+  FINISHED
+  SOS
+}
+
+enum ConversationType {
+  DIRECT
+  GROUP
+}
+
+enum NotificationType {
+  MESSAGE
+  BOOKING_CONFIRMED
+  REMINDER
+  REVIEW_REQUEST
+  PROMO
+  SYSTEM
+}
 
 model User {
   id             String       @id @default(cuid())
