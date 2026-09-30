@@ -64,18 +64,34 @@ export default function ProfilePage() {
               </div>
             ))}
             {user.role==="ADMIN"&&<Link href="/admin"
-                                    <Link
+<Link
   href="/profile/change-password"
   className="mt-4 block w-full rounded-xl border border-black/10 py-3 text-center text-sm font-medium"
 >
   🔐 Promijeni lozinku
 </Link>
-                                    className="mt-4 block w-full rounded-xl bg-black/5 py-3 text-center text-sm font-medium">⚙️ Admin panel</Link>}
-            {user.role==="GUIDE"&&user.guideStatus==="APPROVED"&&<Link href="/tours/new" className="mt-4 block w-full rounded-xl bg-brand-light py-3 text-center text-sm font-medium text-brand-dark">➕ Dodaj novu turu</Link>}
-            <button onClick={logout} className="mt-3 w-full rounded-xl border border-red-200 py-3 text-sm text-red-500">Odjavi se</button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
+
+{user.role==="ADMIN"&&(
+  <Link
+    href="/admin"
+    className="mt-4 block w-full rounded-xl bg-black/5 py-3 text-center text-sm font-medium"
+  >
+    ⚙️ Admin panel
+  </Link>
+)}
+
+{user.role==="GUIDE"&&user.guideStatus==="APPROVED"&&(
+  <Link
+    href="/tours/new"
+    className="mt-4 block w-full rounded-xl bg-brand-light py-3 text-center text-sm font-medium text-brand-dark"
+  >
+    ➕ Dodaj novu turu
+  </Link>
+)}
+
+<button
+  onClick={logout}
+  className="mt-3 w-full rounded-xl border border-red-200 py-3 text-sm text-red-500"
+>
+  Odjavi se
+</button>
