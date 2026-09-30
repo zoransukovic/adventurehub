@@ -1,7 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verify } from "@/lib/auth";
 
-const PUBLIC_PATHS = ["/", "/login", "/register", "/api/auth/login", "/api/auth/register", "/api/auth/me", "/api/activities", "/api/tours"];
+const PUBLIC_PATHS = [
+  "/",
+  "/login",
+  "/register",
+  "/forgot-password",
+  "/reset-password",
+  "/api/auth/login",
+  "/api/auth/register",
+  "/api/auth/me",
+  "/api/auth/forgot-password",
+  "/api/auth/reset-password",
+  "/api/activities",
+  "/api/tours"
+];
 const ADMIN_PATHS = ["/admin"];
 const GUIDE_PATHS = ["/tours/new"];
 
