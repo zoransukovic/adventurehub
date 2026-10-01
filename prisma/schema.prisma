@@ -188,6 +188,20 @@ model Booking {
   @@map("bookings")
 }
 
+model BookingParticipant {
+  id        String   @id @default(cuid())
+  bookingId String
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  fullName  String
+  age       Int
+
+  createdAt DateTime @default(now())
+
+  @@index([bookingId])
+  @@map("booking_participants")
+}
+
 model TrackingSession {
   id                String          @id @default(cuid())
   userId            String
