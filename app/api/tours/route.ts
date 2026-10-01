@@ -131,9 +131,25 @@ export async function GET(req: NextRequest) {
         },
       },
 
+      /*
+       * Podaci rute potrebni za prikaz
+       * ture na interaktivnoj mapi.
+       */
       route: {
         select: {
+          startLat: true,
+          startLng: true,
+
+          endLat: true,
+          endLng: true,
+
+          startLabel: true,
+          endLabel: true,
+
+          points: true,
+
           distanceKm: true,
+          elevationGainM: true,
           estimatedMins: true,
         },
       },
@@ -170,7 +186,8 @@ export async function GET(req: NextRequest) {
 
       avgRating: t.reviews.length
         ? t.reviews.reduce(
-            (sum, review) => sum + review.rating,
+            (sum, review) =>
+              sum + review.rating,
             0
           ) / t.reviews.length
         : null,
@@ -181,12 +198,14 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { error, session } = await guard("GUIDE");
+  const { error, session } =
+    await guard("GUIDE");
 
   if (error) return error;
 
   /*
-   * 1. Provjera podataka koje je poslao frontend
+   * 1. Provjera podataka koje je
+   * poslao frontend.
    */
   const body = tourSchema.safeParse(
     await req.json().catch(() => ({}))
@@ -212,21 +231,21 @@ export async function POST(req: NextRequest) {
   } = body.data;
 
   /*
-   * 2. Provjeri da izabrana vrsta aktivnosti
-   * stvarno postoji u bazi.
-   *
-   * Ovo sprečava Prisma P2003 foreign-key grešku.
+   * 2. Provjera da izabrana vrsta
+   * aktivnosti stvarno postoji.
    */
-  const activity = await prisma.activityType.findUnique({
-    where: {
-      id: tourData.activityTypeId,
-    },
-    select: {
-      id: true,
-      name: true,
-      active: true,
-    },
-  });
+  const activity =
+    await prisma.activityType.findUnique({
+      where: {
+        id: tourData.activityTypeId,
+      },
+
+      select: {
+        id: true,
+        name: true,
+        active: true,
+      },
+    });
 
   if (!activity) {
     return NextResponse.json(
@@ -247,7 +266,8 @@ export async function POST(req: NextRequest) {
   if (!activity.active) {
     return NextResponse.json(
       {
-        error: `Aktivnost "${activity.name}" trenutno nije dostupna.`,
+        error:
+          `Aktivnost "${activity.name}" trenutno nije dostupna.`,
       },
       {
         status: 400,
@@ -256,26 +276,36 @@ export async function POST(req: NextRequest) {
   }
 
   /*
-   * 3. Serverska provjera svih termina
+   * 3. Serverska provjera svih termina.
    */
-  for (let i = 0; i < departureDates.length; i++) {
-    const departure = departureDates[i];
+  for (
+    let i = 0;
+    i < departureDates.length;
+    i++
+  ) {
+    const departure =
+      departureDates[i];
 
-    const startsAt = new Date(departure.startsAt);
+    const startsAt =
+      new Date(departure.startsAt);
 
-    const bookingDeadline = new Date(
-      departure.bookingDeadline
-    );
+    const bookingDeadline =
+      new Date(
+        departure.bookingDeadline
+      );
 
     if (
-      Number.isNaN(startsAt.getTime()) ||
-      Number.isNaN(bookingDeadline.getTime())
+      Number.isNaN(
+        startsAt.getTime()
+      ) ||
+      Number.isNaN(
+        bookingDeadline.getTime()
+      )
     ) {
       return NextResponse.json(
         {
-          error: `Termin ${
-            i + 1
-          }: datum ili vrijeme nije ispravno.`,
+          error:
+            `Termin ${i + 1}: datum ili vrijeme nije ispravno.`,
         },
         {
           status: 400,
@@ -284,14 +314,17 @@ export async function POST(req: NextRequest) {
     }
 
     /*
-     * Ne dozvoljavamo termin u prošlosti.
+     * Ne dozvoljavamo termin
+     * u prošlosti.
      */
-    if (startsAt.getTime() <= Date.now()) {
+    if (
+      startsAt.getTime() <=
+      Date.now()
+    ) {
       return NextResponse.json(
         {
-          error: `Termin ${
-            i + 1
-          }: vrijeme polaska mora biti u budućnosti.`,
+          error:
+            `Termin ${i + 1}: vrijeme polaska mora biti u budućnosti.`,
         },
         {
           status: 400,
@@ -308,9 +341,8 @@ export async function POST(req: NextRequest) {
     ) {
       return NextResponse.json(
         {
-          error: `Termin ${
-            i + 1
-          }: rok za rezervacije mora biti prije vremena polaska.`,
+          error:
+            `Termin ${i + 1}: rok za rezervacije mora biti prije vremena polaska.`,
         },
         {
           status: 400,
@@ -319,8 +351,8 @@ export async function POST(req: NextRequest) {
     }
 
     /*
-     * Rok za rezervacije takođe treba
-     * da bude u budućnosti.
+     * Rok za rezervacije mora
+     * biti u budućnosti.
      */
     if (
       bookingDeadline.getTime() <=
@@ -328,9 +360,8 @@ export async function POST(req: NextRequest) {
     ) {
       return NextResponse.json(
         {
-          error: `Termin ${
-            i + 1
-          }: rok za rezervacije mora biti u budućnosti.`,
+          error:
+            `Termin ${i + 1}: rok za rezervacije mora biti u budućnosti.`,
         },
         {
           status: 400,
@@ -348,9 +379,8 @@ export async function POST(req: NextRequest) {
     ) {
       return NextResponse.json(
         {
-          error: `Termin ${
-            i + 1
-          }: broj slobodnih mjesta ne može biti veći od maksimalnog broja učesnika (${tourData.maxParticipants}).`,
+          error:
+            `Termin ${i + 1}: broj slobodnih mjesta ne može biti veći od maksimalnog broja učesnika (${tourData.maxParticipants}).`,
         },
         {
           status: 400,
@@ -360,46 +390,53 @@ export async function POST(req: NextRequest) {
   }
 
   /*
-   * 4. Kreiranje ture
+   * 4. Kreiranje ture.
    */
   try {
-    const tour = await prisma.tour.create({
-      data: {
-        ...tourData,
+    const tour =
+      await prisma.tour.create({
+        data: {
+          ...tourData,
 
-        guideId: session!.userId,
+          guideId:
+            session!.userId,
 
-        route: {
-          create: {
-            ...route,
-            points: route.points as never,
+          route: {
+            create: {
+              ...route,
+
+              points:
+                route.points as never,
+            },
+          },
+
+          departures: {
+            create:
+              departureDates.map(
+                (departure) => ({
+                  startsAt:
+                    new Date(
+                      departure.startsAt
+                    ),
+
+                  bookingDeadline:
+                    new Date(
+                      departure.bookingDeadline
+                    ),
+
+                  spotsLeft:
+                    departure.spotsLeft,
+                })
+              ),
           },
         },
 
-        departures: {
-          create: departureDates.map(
-            (departure) => ({
-              startsAt: new Date(
-                departure.startsAt
-              ),
-
-              bookingDeadline: new Date(
-                departure.bookingDeadline
-              ),
-
-              spotsLeft:
-                departure.spotsLeft,
-            })
-          ),
+        include: {
+          route: true,
+          activityType: true,
+          departures: true,
         },
-      },
-
-      include: {
-        route: true,
-        activityType: true,
-        departures: true,
-      },
-    });
+      });
 
     return NextResponse.json(
       {
