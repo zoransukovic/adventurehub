@@ -451,3 +451,300 @@ export async function PATCH(
     );
   }
 }
+
+/*
+ * DELETE /api/bookings/[id]
+ *
+ * Otkazivanje postojeće rezervacije.
+ */
+export async function DELETE(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  const { error, session } = await guard();
+
+  if (error) return error;
+
+  const { id } = await context.params;
+
+  /*
+   * Pronalazimo rezervaciju.
+   */
+  const booking = await prisma.booking.findUnique({
+    where: {
+      id,
+    },
+
+    include: {
+      departure: true,
+
+      tour: {
+        select: {
+          id: true,
+          title: true,
+          guideId: true,
+        },
+      },
+    },
+  });
+
+  if (!booking) {
+    return NextResponse.json(
+      {
+        error: "Rezervacija nije pronađena.",
+      },
+      {
+        status: 404,
+      }
+    );
+  }
+
+  /*
+   * Samo vlasnik rezervacije
+   * može da je otkaže.
+   */
+  if (booking.userId !== session!.userId) {
+    return NextResponse.json(
+      {
+        error:
+          "Nemate pravo da otkažete ovu rezervaciju.",
+      },
+      {
+        status: 403,
+      }
+    );
+  }
+
+  /*
+   * Možemo otkazati samo aktivnu rezervaciju.
+   */
+  if (
+    booking.status !== "PENDING" &&
+    booking.status !== "CONFIRMED"
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "Ovu rezervaciju nije moguće otkazati.",
+      },
+      {
+        status: 400,
+      }
+    );
+  }
+
+  /*
+   * Termin ne smije biti već počeo.
+   */
+  if (
+    booking.departure.startsAt.getTime() <=
+    Date.now()
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "Termin je već počeo ili je završen. Rezervaciju više nije moguće otkazati.",
+      },
+      {
+        status: 400,
+      }
+    );
+  }
+
+  /*
+   * Otkazivanje je dozvoljeno samo
+   * do bookingDeadline.
+   */
+  if (booking.departure.bookingDeadline) {
+    if (
+      booking.departure.bookingDeadline.getTime() <=
+      Date.now()
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Rok za otkazivanje ove rezervacije je istekao.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+  }
+
+  try {
+    const cancelledBooking =
+      await prisma.$transaction(
+        async (tx) => {
+          /*
+           * Ponovo čitamo rezervaciju
+           * unutar transakcije.
+           */
+          const currentBooking =
+            await tx.booking.findUnique({
+              where: {
+                id,
+              },
+
+              include: {
+                departure: true,
+              },
+            });
+
+          if (!currentBooking) {
+            throw new Error(
+              "Rezervacija više ne postoji."
+            );
+          }
+
+          /*
+           * Ponovna provjera vlasnika.
+           */
+          if (
+            currentBooking.userId !==
+            session!.userId
+          ) {
+            throw new Error(
+              "Nemate pravo da otkažete ovu rezervaciju."
+            );
+          }
+
+          /*
+           * Sprečavamo dvostruko otkazivanje.
+           *
+           * Ovo je posebno važno jer bi inače
+           * spotsLeft mogao biti povećan dva puta.
+           */
+          if (
+            currentBooking.status !== "PENDING" &&
+            currentBooking.status !== "CONFIRMED"
+          ) {
+            throw new Error(
+              "Ova rezervacija je već otkazana ili završena."
+            );
+          }
+
+          /*
+           * Ponovna provjera vremena polaska.
+           */
+          if (
+            currentBooking.departure.startsAt.getTime() <=
+            Date.now()
+          ) {
+            throw new Error(
+              "Termin je već počeo ili je završen."
+            );
+          }
+
+          /*
+           * Ponovna provjera bookingDeadline.
+           */
+          if (
+            currentBooking.departure
+              .bookingDeadline &&
+            currentBooking.departure
+              .bookingDeadline.getTime() <=
+              Date.now()
+          ) {
+            throw new Error(
+              "Rok za otkazivanje ove rezervacije je istekao."
+            );
+          }
+
+          /*
+           * Vraćamo sva mjesta koja je
+           * rezervacija zauzimala.
+           */
+          await tx.tourDeparture.update({
+            where: {
+              id: currentBooking.departureId,
+            },
+
+            data: {
+              spotsLeft: {
+                increment:
+                  currentBooking.participants,
+              },
+            },
+          });
+
+          /*
+           * Rezervaciju NE brišemo.
+           *
+           * Ostaje u istoriji, ali dobija
+           * status CANCELLED.
+           */
+          return tx.booking.update({
+            where: {
+              id,
+            },
+
+            data: {
+              status: "CANCELLED",
+            },
+
+            include: {
+              participantsInfo: true,
+
+              departure: true,
+
+              tour: {
+                select: {
+                  id: true,
+                  title: true,
+                  pricePerPerson: true,
+                },
+              },
+            },
+          });
+        }
+      );
+
+    /*
+     * Ime korisnika za obavještenje vodiču.
+     */
+    const user = await prisma.user.findUnique({
+      where: {
+        id: session!.userId,
+      },
+
+      select: {
+        fullName: true,
+      },
+    });
+
+    /*
+     * Obavještavamo vodiča.
+     */
+    await createNotification(
+      booking.tour.guideId,
+      "BOOKING_CONFIRMED",
+      `Otkazana rezervacija za "${booking.tour.title}"`,
+      `${user?.fullName} je otkazao/la rezervaciju za ${booking.participants} osoba`,
+      "/profile"
+    );
+
+    return NextResponse.json({
+      booking: cancelledBooking,
+      message:
+        "Rezervacija je uspješno otkazana.",
+    });
+  } catch (err) {
+    console.error(
+      "Greška pri otkazivanju rezervacije:",
+      err
+    );
+
+    return NextResponse.json(
+      {
+        error:
+          err instanceof Error
+            ? err.message
+            : "Došlo je do greške prilikom otkazivanja rezervacije.",
+      },
+      {
+        status: 400,
+      }
+    );
+  }
+}
