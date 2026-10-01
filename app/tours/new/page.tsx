@@ -125,13 +125,7 @@ export default function NewTourPage() {
   function validateStep1() {
     const e: string[] = [];
 
-    if (route.points.length < 2) {
-  e.push(
-    route.creationMode === "manual"
-      ? "Nacrtajte rutu na mapi sa najmanje dvije tačke."
-      : "Izaberite početak i cilj na mapi."
-  );
-}
+
 
     if (!form.title.trim()) {
       e.push("Unesite naziv ture.");
@@ -171,6 +165,14 @@ export default function NewTourPage() {
   function validateStep2() {
     const e: string[] = [];
 
+if (route.points.length < 2) {
+  e.push(
+    route.creationMode === "manual"
+      ? "Nacrtajte rutu na mapi sa najmanje dvije tačke."
+      : "Izaberite početak i cilj na mapi."
+  );
+}
+    
     if (
       !Number.isFinite(route.startLat) ||
       route.startLat < -90 ||
