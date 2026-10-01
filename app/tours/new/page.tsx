@@ -279,6 +279,16 @@ export default function NewTourPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+function cancel() {
+  const confirmed = window.confirm(
+    "Da li ste sigurni da želite odustati od kreiranja ture? Uneseni podaci neće biti sačuvani."
+  );
+
+  if (confirmed) {
+    router.push("/profile");
+  }
+}
+  
   async function submit() {
     setErrors([]);
 
