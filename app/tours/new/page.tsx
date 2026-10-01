@@ -20,7 +20,7 @@ export default function NewTourPage() {
 
   const [step, setStep] = useState(1);
   const [activities, setActivities] = useState<Activity[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
   const [form, setForm] = useState({
@@ -63,7 +63,10 @@ export default function NewTourPage() {
   useEffect(() => {
     fetch("/api/activities")
       .then((r) => r.json())
-      .then((d) => setActivities(d.activities ?? []));
+      .then((d) => setActivities(d.activities ?? []))
+      .catch(() => {
+        setErrors(["Nije moguće učitati vrste aktivnosti."]);
+      });
   }, []);
 
   const INCLUDES = [
@@ -75,15 +78,16 @@ export default function NewTourPage() {
     "Foto/video",
   ];
 
-  const toggleInclude = (i: string) =>
+  const toggleInclude = (item: string) => {
     setForm((f) => ({
       ...f,
-      includesItems: f.includesItems.includes(i)
-        ? f.includesItems.filter((x) => x !== i)
-        : [...f.includesItems, i],
+      includesItems: f.includesItems.includes(item)
+        ? f.includesItems.filter((x) => x !== item)
+        : [...f.includesItems, item],
     }));
+  };
 
-  const addDeparture = () =>
+  const addDeparture = () => {
     setDepartures((d) => [
       ...d,
       {
@@ -92,57 +96,194 @@ export default function NewTourPage() {
         spotsLeft: form.maxParticipants,
       },
     ]);
+  };
 
-  const removeDeparture = (i: number) =>
-    setDepartures((d) => d.filter((_, idx) => idx !== i));
+  const removeDeparture = (index: number) => {
+    setDepartures((d) => d.filter((_, i) => i !== index));
+  };
 
-  async function submit() {
-    setError(null);
+  /*
+   * VALIDACIJA KORAKA 1
+   */
+  function validateStep1() {
+    const e: string[] = [];
 
-    const validDepartures = departures.filter((d) => d.startsAt);
-
-    if (validDepartures.length === 0) {
-      setError("Dodajte najmanje jedan termin polaska.");
-      return;
+    if (!form.title.trim()) {
+      e.push("Unesite naziv ture.");
+    } else if (form.title.trim().length < 3) {
+      e.push("Naziv ture mora imati najmanje 3 karaktera.");
     }
 
-    for (let i = 0; i < validDepartures.length; i++) {
-      const dep = validDepartures[i];
+    if (!form.activityTypeId) {
+      e.push("Izaberite vrstu aktivnosti.");
+    }
 
-      if (!dep.bookingDeadline) {
-        setError(
-          `Unesite rok za rezervacije za termin ${i + 1}.`
-        );
-        return;
+    if (form.pricePerPerson <= 0) {
+      e.push("Unesite cijenu po osobi veću od 0 €.");
+    }
+
+    if (
+      !Number.isInteger(form.maxParticipants) ||
+      form.maxParticipants < 1
+    ) {
+      e.push("Maksimalan broj učesnika mora biti najmanje 1.");
+    }
+
+    if (!form.descriptionSr.trim()) {
+      e.push("Unesite opis ture na srpskom.");
+    } else if (form.descriptionSr.trim().length < 10) {
+      e.push("Opis ture mora imati najmanje 10 karaktera.");
+    }
+
+    setErrors(e);
+
+    return e.length === 0;
+  }
+
+  /*
+   * VALIDACIJA KORAKA 2
+   */
+  function validateStep2() {
+    const e: string[] = [];
+
+    if (
+      !Number.isFinite(route.startLat) ||
+      route.startLat < -90 ||
+      route.startLat > 90
+    ) {
+      e.push("Početna geografska širina nije ispravna.");
+    }
+
+    if (
+      !Number.isFinite(route.startLng) ||
+      route.startLng < -180 ||
+      route.startLng > 180
+    ) {
+      e.push("Početna geografska dužina nije ispravna.");
+    }
+
+    if (
+      !Number.isFinite(route.endLat) ||
+      route.endLat < -90 ||
+      route.endLat > 90
+    ) {
+      e.push("Krajnja geografska širina nije ispravna.");
+    }
+
+    if (
+      !Number.isFinite(route.endLng) ||
+      route.endLng < -180 ||
+      route.endLng > 180
+    ) {
+      e.push("Krajnja geografska dužina nije ispravna.");
+    }
+
+    if (route.distanceKm < 0) {
+      e.push("Dužina rute ne može biti negativna.");
+    }
+
+    if (route.elevationGainM < 0) {
+      e.push("Visinska razlika ne može biti negativna.");
+    }
+
+    if (route.estimatedMins < 0) {
+      e.push("Trajanje rute ne može biti negativno.");
+    }
+
+    setErrors(e);
+
+    return e.length === 0;
+  }
+
+  /*
+   * VALIDACIJA KORAKA 3
+   */
+  function validateStep3() {
+    const e: string[] = [];
+
+    if (departures.length === 0) {
+      e.push("Dodajte najmanje jedan termin polaska.");
+      setErrors(e);
+      return false;
+    }
+
+    departures.forEach((departure, index) => {
+      const n = index + 1;
+
+      if (!departure.startsAt) {
+        e.push(`Termin ${n}: unesite datum i vrijeme polaska.`);
       }
 
-      const start = new Date(dep.startsAt);
-      const deadline = new Date(dep.bookingDeadline);
-
-      if (deadline >= start) {
-        setError(
-          `Rok za rezervacije za termin ${
-            i + 1
-          } mora biti prije vremena polaska.`
+      if (!departure.bookingDeadline) {
+        e.push(
+          `Termin ${n}: unesite rok za rezervacije i izmjene.`
         );
-        return;
       }
 
-      if (dep.spotsLeft < 1) {
-        setError(
-          `Broj mjesta za termin ${i + 1} mora biti najmanje 1.`
-        );
-        return;
+      if (departure.startsAt && departure.bookingDeadline) {
+        const start = new Date(departure.startsAt);
+        const deadline = new Date(departure.bookingDeadline);
+
+        if (
+          Number.isNaN(start.getTime()) ||
+          Number.isNaN(deadline.getTime())
+        ) {
+          e.push(`Termin ${n}: datum ili vrijeme nije ispravno.`);
+        } else if (deadline >= start) {
+          e.push(
+            `Termin ${n}: rok za rezervacije mora biti prije vremena polaska.`
+          );
+        }
       }
 
-      if (dep.spotsLeft > form.maxParticipants) {
-        setError(
-          `Broj mjesta za termin ${
-            i + 1
-          } ne može biti veći od maksimalnog broja učesnika (${form.maxParticipants}).`
+      if (
+        !Number.isInteger(departure.spotsLeft) ||
+        departure.spotsLeft < 1
+      ) {
+        e.push(
+          `Termin ${n}: broj slobodnih mjesta mora biti najmanje 1.`
         );
-        return;
       }
+
+      if (departure.spotsLeft > form.maxParticipants) {
+        e.push(
+          `Termin ${n}: broj slobodnih mjesta ne može biti veći od maksimalnog broja učesnika (${form.maxParticipants}).`
+        );
+      }
+    });
+
+    setErrors(e);
+
+    return e.length === 0;
+  }
+
+  function goToStep2() {
+    if (!validateStep1()) return;
+
+    setErrors([]);
+    setStep(2);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function goToStep3() {
+    if (!validateStep2()) return;
+
+    setErrors([]);
+    setStep(3);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function goBack(stepNumber: number) {
+    setErrors([]);
+    setStep(stepNumber);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function submit() {
+    setErrors([]);
+
+    if (!validateStep3()) {
+      return;
     }
 
     setLoading(true);
@@ -156,24 +297,62 @@ export default function NewTourPage() {
         body: JSON.stringify({
           ...form,
           route,
-          departureDates: validDepartures,
+          departureDates: departures,
         }),
       });
 
-      const d = await res.json();
+      let data: any = null;
 
-      setLoading(false);
-
-      if (!res.ok) {
-        setError(d.error || "Objavljivanje ture nije uspjelo.");
+      try {
+        data = await res.json();
+      } catch {
+        setLoading(false);
+        setErrors([
+          `Server je vratio neispravan odgovor (HTTP ${res.status}).`,
+        ]);
         return;
       }
 
-      router.push(`/tours/${d.tour.id}`);
-    } catch {
+      if (!res.ok) {
+        setLoading(false);
+
+        setErrors([
+          data?.error ||
+            `Objavljivanje ture nije uspjelo (HTTP ${res.status}).`,
+        ]);
+
+        return;
+      }
+
       setLoading(false);
-      setError("Došlo je do greške. Pokušajte ponovo.");
+      router.push(`/tours/${data.tour.id}`);
+    } catch (err) {
+      console.error(err);
+
+      setLoading(false);
+
+      setErrors([
+        "Nije moguće povezati se sa serverom. Pokušajte ponovo.",
+      ]);
     }
+  }
+
+  function ErrorBox() {
+    if (errors.length === 0) return null;
+
+    return (
+      <div className="rounded-xl border border-red-200 bg-red-50 p-3">
+        <p className="text-sm font-medium text-red-700">
+          ⚠ Potrebno je ispraviti:
+        </p>
+
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-red-600">
+          {errors.map((error, index) => (
+            <li key={`${error}-${index}`}>{error}</li>
+          ))}
+        </ul>
+      </div>
+    );
   }
 
   return (
@@ -210,7 +389,7 @@ export default function NewTourPage() {
           <div className="flex flex-col gap-3">
             <div>
               <label className="mb-1 block text-xs text-foreground/60">
-                Naziv ture
+                Naziv ture *
               </label>
 
               <input
@@ -228,7 +407,7 @@ export default function NewTourPage() {
 
             <div>
               <label className="mb-1 block text-xs text-foreground/60">
-                Vrsta aktivnosti
+                Vrsta aktivnosti *
               </label>
 
               <select
@@ -255,7 +434,7 @@ export default function NewTourPage() {
 
             <div>
               <label className="mb-1 block text-xs text-foreground/60">
-                Način kretanja
+                Način kretanja *
               </label>
 
               <div className="grid grid-cols-3 gap-2">
@@ -268,24 +447,24 @@ export default function NewTourPage() {
                     ["KAYAK", "🛶", "Kajak"],
                     ["DIVING", "🤿", "Ronjenje"],
                   ] as const
-                ).map(([v, ic, lb]) => (
+                ).map(([value, icon, label]) => (
                   <button
-                    key={v}
+                    key={value}
                     type="button"
                     onClick={() =>
                       setForm((f) => ({
                         ...f,
-                        transportMode: v,
+                        transportMode: value,
                       }))
                     }
                     className={`rounded-lg border p-2 text-center text-xs ${
-                      form.transportMode === v
+                      form.transportMode === value
                         ? "border-brand bg-brand-light text-brand-dark"
                         : "border-black/10"
                     }`}
                   >
-                    <div className="text-xl">{ic}</div>
-                    {lb}
+                    <div className="text-xl">{icon}</div>
+                    {label}
                   </button>
                 ))}
               </div>
@@ -294,11 +473,13 @@ export default function NewTourPage() {
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="mb-1 block text-xs text-foreground/60">
-                  Cijena (€/osobi)
+                  Cijena (€/osobi) *
                 </label>
 
                 <input
                   type="number"
+                  min={0}
+                  step="0.01"
                   value={form.pricePerPerson || ""}
                   onChange={(e) =>
                     setForm((f) => ({
@@ -312,11 +493,12 @@ export default function NewTourPage() {
 
               <div>
                 <label className="mb-1 block text-xs text-foreground/60">
-                  Max učesnika
+                  Max učesnika *
                 </label>
 
                 <input
                   type="number"
+                  min={1}
                   value={form.maxParticipants}
                   onChange={(e) =>
                     setForm((f) => ({
@@ -331,7 +513,7 @@ export default function NewTourPage() {
 
             <div>
               <label className="mb-1 block text-xs text-foreground/60">
-                Težina
+                Težina *
               </label>
 
               <div className="flex gap-2">
@@ -341,23 +523,23 @@ export default function NewTourPage() {
                     ["MODERATE", "🟡 Umjereno"],
                     ["HARD", "🔴 Teško"],
                   ] as const
-                ).map(([v, l]) => (
+                ).map(([value, label]) => (
                   <button
-                    key={v}
+                    key={value}
                     type="button"
                     onClick={() =>
                       setForm((f) => ({
                         ...f,
-                        difficulty: v,
+                        difficulty: value,
                       }))
                     }
                     className={`flex-1 rounded-lg border py-2 text-xs ${
-                      form.difficulty === v
+                      form.difficulty === value
                         ? "border-brand bg-brand-light text-brand-dark"
                         : "border-black/10"
                     }`}
                   >
-                    {l}
+                    {label}
                   </button>
                 ))}
               </div>
@@ -365,7 +547,7 @@ export default function NewTourPage() {
 
             <div>
               <label className="mb-1 block text-xs text-foreground/60">
-                Opis (srpski)
+                Opis (srpski) *
               </label>
 
               <textarea
@@ -377,6 +559,7 @@ export default function NewTourPage() {
                   }))
                 }
                 rows={4}
+                placeholder="Najmanje 10 karaktera"
                 className="w-full resize-none rounded-lg border border-black/10 px-3 py-2.5 text-sm outline-none focus:border-brand"
               />
             </div>
@@ -405,18 +588,18 @@ export default function NewTourPage() {
               </label>
 
               <div className="flex flex-wrap gap-1.5">
-                {INCLUDES.map((i) => (
+                {INCLUDES.map((item) => (
                   <button
-                    key={i}
+                    key={item}
                     type="button"
-                    onClick={() => toggleInclude(i)}
+                    onClick={() => toggleInclude(item)}
                     className={`rounded-full border px-3 py-1 text-xs ${
-                      form.includesItems.includes(i)
+                      form.includesItems.includes(item)
                         ? "border-brand bg-brand-light text-brand-dark"
                         : "border-black/10 text-foreground/60"
                     }`}
                   >
-                    {i}
+                    {item}
                   </button>
                 ))}
               </div>
@@ -440,46 +623,51 @@ export default function NewTourPage() {
               />
             </div>
 
+            <ErrorBox />
+
             <button
-              onClick={() => setStep(2)}
+              type="button"
+              onClick={goToStep2}
               className="mt-2 w-full rounded-xl bg-brand py-3 text-sm font-medium text-white"
             >
               Dalje: Ruta →
             </button>
+
+            <p className="text-center text-[11px] text-foreground/40">
+              * Obavezna polja
+            </p>
           </div>
         )}
 
         {step === 2 && (
           <div className="flex flex-col gap-3">
             <div className="grid grid-cols-2 gap-2">
-              {(["auto", "manual"] as const).map((m) => (
+              {(["auto", "manual"] as const).map((mode) => (
                 <button
-                  key={m}
+                  key={mode}
                   type="button"
                   onClick={() =>
                     setRoute((r) => ({
                       ...r,
-                      creationMode: m,
+                      creationMode: mode,
                     }))
                   }
                   className={`rounded-xl border p-3 text-center text-sm ${
-                    route.creationMode === m
+                    route.creationMode === mode
                       ? "border-brand bg-brand-light text-brand-dark"
                       : "border-black/10"
                   }`}
                 >
                   <div className="text-2xl">
-                    {m === "auto" ? "🗺️" : "✏️"}
+                    {mode === "auto" ? "🗺️" : "✏️"}
                   </div>
 
                   <div className="mt-1 font-medium">
-                    {m === "auto"
-                      ? "Automatski"
-                      : "Ručno"}
+                    {mode === "auto" ? "Automatski" : "Ručno"}
                   </div>
 
                   <div className="text-xs text-foreground/50">
-                    {m === "auto"
+                    {mode === "auto"
                       ? "Start + cilj"
                       : "Klik po klik"}
                   </div>
@@ -489,8 +677,8 @@ export default function NewTourPage() {
 
             <div className="rounded-xl bg-amber-50 p-3 text-xs text-amber-700">
               Na produkciji ovdje ide interaktivna
-              Mapbox/Leaflet mapa. Unesite koordinate
-              ručno ili integrirajte map picker komponentu.
+              Mapbox/Leaflet mapa. Za sada unesite podatke
+              rute ručno.
             </div>
 
             <div>
@@ -545,7 +733,7 @@ export default function NewTourPage() {
                       startLat: Number(e.target.value),
                     }))
                   }
-                  className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm outline-none focus:border-brand"
+                  className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm"
                 />
               </div>
 
@@ -564,7 +752,7 @@ export default function NewTourPage() {
                       startLng: Number(e.target.value),
                     }))
                   }
-                  className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm outline-none focus:border-brand"
+                  className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm"
                 />
               </div>
 
@@ -583,7 +771,7 @@ export default function NewTourPage() {
                       endLat: Number(e.target.value),
                     }))
                   }
-                  className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm outline-none focus:border-brand"
+                  className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm"
                 />
               </div>
 
@@ -602,7 +790,7 @@ export default function NewTourPage() {
                       endLng: Number(e.target.value),
                     }))
                   }
-                  className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm outline-none focus:border-brand"
+                  className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm"
                 />
               </div>
             </div>
@@ -615,6 +803,7 @@ export default function NewTourPage() {
 
                 <input
                   type="number"
+                  min={0}
                   step="0.1"
                   value={route.distanceKm || ""}
                   onChange={(e) =>
@@ -623,7 +812,7 @@ export default function NewTourPage() {
                       distanceKm: Number(e.target.value),
                     }))
                   }
-                  className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm outline-none focus:border-brand"
+                  className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm"
                 />
               </div>
 
@@ -634,6 +823,7 @@ export default function NewTourPage() {
 
                 <input
                   type="number"
+                  min={0}
                   value={route.elevationGainM || ""}
                   onChange={(e) =>
                     setRoute((r) => ({
@@ -641,7 +831,7 @@ export default function NewTourPage() {
                       elevationGainM: Number(e.target.value),
                     }))
                   }
-                  className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm outline-none focus:border-brand"
+                  className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm"
                 />
               </div>
 
@@ -652,6 +842,7 @@ export default function NewTourPage() {
 
                 <input
                   type="number"
+                  min={0}
                   value={route.estimatedMins || ""}
                   onChange={(e) =>
                     setRoute((r) => ({
@@ -659,21 +850,25 @@ export default function NewTourPage() {
                       estimatedMins: Number(e.target.value),
                     }))
                   }
-                  className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm outline-none focus:border-brand"
+                  className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm"
                 />
               </div>
             </div>
 
+            <ErrorBox />
+
             <div className="flex gap-2">
               <button
-                onClick={() => setStep(1)}
+                type="button"
+                onClick={() => goBack(1)}
                 className="flex-1 rounded-xl border border-black/10 py-3 text-sm text-foreground/70"
               >
                 ← Nazad
               </button>
 
               <button
-                onClick={() => setStep(3)}
+                type="button"
+                onClick={goToStep3}
                 className="flex-1 rounded-xl bg-brand py-3 text-sm font-medium text-white"
               >
                 Dalje: Termini →
@@ -685,9 +880,7 @@ export default function NewTourPage() {
         {step === 3 && (
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
-              <p className="font-medium">
-                Termini polaska
-              </p>
+              <p className="font-medium">Termini polaska</p>
 
               <button
                 type="button"
@@ -699,105 +892,121 @@ export default function NewTourPage() {
             </div>
 
             {departures.length === 0 && (
-              <p className="text-sm text-foreground/50">
-                Nema termina. Dodajte najmanje jedan.
-              </p>
+              <div className="rounded-xl border border-dashed border-black/15 p-5 text-center">
+                <p className="text-sm text-foreground/50">
+                  Još nijeste dodali termin.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={addDeparture}
+                  className="mt-3 rounded-lg bg-brand-light px-4 py-2 text-sm font-medium text-brand-dark"
+                >
+                  + Dodaj prvi termin
+                </button>
+              </div>
             )}
 
-            {departures.map((d, i) => (
+            {departures.map((departure, index) => (
               <div
-                key={i}
+                key={index}
                 className="rounded-xl border border-black/10 p-3"
               >
+                <p className="mb-3 text-sm font-medium">
+                  Termin {index + 1}
+                </p>
+
                 <div className="flex flex-col gap-3">
                   <div>
                     <label className="mb-1 block text-xs text-foreground/60">
-                      Datum i vrijeme polaska
+                      Datum i vrijeme polaska *
                     </label>
 
                     <input
                       type="datetime-local"
-                      value={d.startsAt}
+                      value={departure.startsAt}
                       onChange={(e) =>
-                        setDepartures((ds) =>
-                          ds.map((x, idx) =>
-                            idx === i
+                        setDepartures((items) =>
+                          items.map((item, i) =>
+                            i === index
                               ? {
-                                  ...x,
-                                  startsAt:
-                                    e.target.value,
+                                  ...item,
+                                  startsAt: e.target.value,
                                 }
-                              : x
+                              : item
                           )
                         )
                       }
-                      className="w-full rounded-lg border border-black/10 px-2 py-2 text-sm outline-none focus:border-brand"
+                      className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm outline-none focus:border-brand"
                     />
                   </div>
 
                   <div>
                     <label className="mb-1 block text-xs text-foreground/60">
-                      Rezervacije i izmjene moguće do
+                      Rezervacije i izmjene moguće do *
                     </label>
 
                     <input
                       type="datetime-local"
-                      value={d.bookingDeadline}
+                      value={departure.bookingDeadline}
                       onChange={(e) =>
-                        setDepartures((ds) =>
-                          ds.map((x, idx) =>
-                            idx === i
+                        setDepartures((items) =>
+                          items.map((item, i) =>
+                            i === index
                               ? {
-                                  ...x,
-                                  bookingDeadline:
-                                    e.target.value,
+                                  ...item,
+                                  bookingDeadline: e.target.value,
                                 }
-                              : x
+                              : item
                           )
                         )
                       }
-                      className="w-full rounded-lg border border-black/10 px-2 py-2 text-sm outline-none focus:border-brand"
+                      className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm outline-none focus:border-brand"
                     />
 
                     <p className="mt-1 text-[11px] text-foreground/45">
-                      Nakon ovog vremena nove rezervacije
-                      i izmjene postojećih rezervacija
-                      neće biti moguće.
+                      Poslije ovog vremena turista neće moći
+                      napraviti novu niti izmijeniti postojeću
+                      rezervaciju.
                     </p>
                   </div>
 
                   <div>
                     <label className="mb-1 block text-xs text-foreground/60">
-                      Slobodna mjesta
+                      Slobodna mjesta *
                     </label>
 
                     <input
                       type="number"
                       min={1}
                       max={form.maxParticipants}
-                      value={d.spotsLeft}
+                      value={departure.spotsLeft}
                       onChange={(e) =>
-                        setDepartures((ds) =>
-                          ds.map((x, idx) =>
-                            idx === i
+                        setDepartures((items) =>
+                          items.map((item, i) =>
+                            i === index
                               ? {
-                                  ...x,
+                                  ...item,
                                   spotsLeft: Number(
                                     e.target.value
                                   ),
                                 }
-                              : x
+                              : item
                           )
                         )
                       }
-                      className="w-full rounded-lg border border-black/10 px-2 py-2 text-sm outline-none focus:border-brand"
+                      className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm outline-none focus:border-brand"
                     />
+
+                    <p className="mt-1 text-[11px] text-foreground/45">
+                      Maksimalno: {form.maxParticipants}
+                    </p>
                   </div>
                 </div>
 
                 <button
                   type="button"
-                  onClick={() => removeDeparture(i)}
+                  onClick={() => removeDeparture(index)}
                   className="mt-3 text-xs text-red-500"
                 >
                   Ukloni termin
@@ -805,30 +1014,31 @@ export default function NewTourPage() {
               </div>
             ))}
 
-            {error && (
-              <p className="rounded-lg bg-red-50 p-3 text-sm text-red-600">
-                {error}
-              </p>
-            )}
+            <ErrorBox />
 
             <div className="mt-2 flex gap-2">
               <button
-                onClick={() => setStep(2)}
-                className="flex-1 rounded-xl border border-black/10 py-3 text-sm text-foreground/70"
+                type="button"
+                onClick={() => goBack(2)}
+                disabled={loading}
+                className="flex-1 rounded-xl border border-black/10 py-3 text-sm text-foreground/70 disabled:opacity-50"
               >
                 ← Nazad
               </button>
 
               <button
+                type="button"
                 onClick={submit}
                 disabled={loading}
                 className="flex-1 rounded-xl bg-brand py-3 text-sm font-medium text-white disabled:opacity-60"
               >
-                {loading
-                  ? "Objavljivanje..."
-                  : "✓ Objavi turu"}
+                {loading ? "Objavljivanje..." : "✓ Objavi turu"}
               </button>
             </div>
+
+            <p className="text-center text-[11px] text-foreground/40">
+              * Obavezna polja
+            </p>
           </div>
         )}
       </div>
