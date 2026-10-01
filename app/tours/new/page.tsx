@@ -711,6 +711,7 @@ function cancel() {
 
 <RouteEditorMap
   mode={route.creationMode}
+  
   transportMode={form.transportMode}
   points={route.points}
   startLat={route.startLat}
