@@ -709,8 +709,9 @@ function cancel() {
               ))}
             </div>
 
-           <RouteEditorMap
+<RouteEditorMap
   mode={route.creationMode}
+  transportMode={form.transportMode}
   points={route.points}
   startLat={route.startLat}
   startLng={route.startLng}
@@ -730,6 +731,10 @@ function cancel() {
 
       distanceKm:
         data.distanceKm,
+
+      estimatedMins:
+        data.estimatedMins ??
+        r.estimatedMins,
     }))
   }
 />
