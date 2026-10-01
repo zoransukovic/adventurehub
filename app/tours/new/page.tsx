@@ -4,6 +4,23 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/app/components/Navbar";
 
+import dynamic from "next/dynamic";
+
+const RouteEditorMap = dynamic(
+  () =>
+    import(
+      "@/app/components/RouteEditorMap"
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-[420px] items-center justify-center rounded-2xl bg-brand-light text-sm text-foreground/50">
+        Učitavanje mape...
+      </div>
+    ),
+  }
+);
+
 type Activity = {
   id: string;
   name: string;
@@ -107,6 +124,14 @@ export default function NewTourPage() {
    */
   function validateStep1() {
     const e: string[] = [];
+
+    if (route.points.length < 2) {
+  e.push(
+    route.creationMode === "manual"
+      ? "Nacrtajte rutu na mapi sa najmanje dvije tačke."
+      : "Izaberite početak i cilj na mapi."
+  );
+}
 
     if (!form.title.trim()) {
       e.push("Unesite naziv ture.");
@@ -682,12 +707,30 @@ function cancel() {
               ))}
             </div>
 
-            <div className="rounded-xl bg-amber-50 p-3 text-xs text-amber-700">
-              Na produkciji ovdje ide interaktivna
-              Mapbox/Leaflet mapa. Za sada unesite podatke
-              rute ručno.
-            </div>
+           <RouteEditorMap
+  mode={route.creationMode}
+  points={route.points}
+  startLat={route.startLat}
+  startLng={route.startLng}
+  endLat={route.endLat}
+  endLng={route.endLng}
+  onChange={(data) =>
+    setRoute((r) => ({
+      ...r,
 
+      points: data.points,
+
+      startLat: data.startLat,
+      startLng: data.startLng,
+
+      endLat: data.endLat,
+      endLng: data.endLng,
+
+      distanceKm:
+        data.distanceKm,
+    }))
+  }
+/>
             <div>
               <label className="mb-1 block text-xs text-foreground/60">
                 Naziv polazišta
