@@ -729,8 +729,7 @@ function cancel() {
       endLat: data.endLat,
       endLng: data.endLng,
 
-      distanceKm:
-        data.distanceKm,
+      distanceKm: data.distanceKm,
 
       estimatedMins:
         data.estimatedMins ??
