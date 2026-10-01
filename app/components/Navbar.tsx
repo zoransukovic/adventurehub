@@ -56,7 +56,8 @@ export default function Navbar() {
         <Link
           key={l.href}
           href={l.href}
-          className={`relative flex flex-col items-center gap-0.5 px-2 text-[10px] ${
+
+          className={`relative flex flex-col items-center gap-0.5 px-2 text-xs ${
             path.startsWith(l.href)
               ? "text-brand font-medium"
               : "text-foreground/45"
