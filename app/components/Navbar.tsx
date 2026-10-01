@@ -62,7 +62,7 @@ export default function Navbar() {
               : "text-foreground/45"
           }`}
         >
-          <span className="text-xl leading-none">{l.icon}</span>
+          <span className="text-3xl leading-none">{l.icon}</span>
 
           {l.label}
 
