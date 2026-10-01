@@ -4,10 +4,23 @@ import { guard } from "@/lib/guard";
 import { createNotification } from "@/lib/notify";
 import { z } from "zod";
 
+const participantSchema = z.object({
+  fullName: z
+    .string()
+    .trim()
+    .min(3, "Unesite ime i prezime učesnika"),
+  age: z
+    .number()
+    .int()
+    .min(1, "Starost mora biti najmanje 1 godina")
+    .max(120, "Unesite ispravnu starost"),
+});
+
 const schema = z.object({
   tourId: z.string(),
   departureId: z.string(),
-  participants: z.number().int().min(1).default(1),
+  participants: z.number().int().min(1),
+  participantsInfo: z.array(participantSchema),
 });
 
 export async function GET(req: NextRequest) {
@@ -33,6 +46,7 @@ export async function GET(req: NextRequest) {
           rating: true,
         },
       },
+      participantsInfo: true,
     },
     orderBy: {
       createdAt: "desc",
@@ -52,12 +66,31 @@ export async function POST(req: NextRequest) {
 
   if (!parsed.success) {
     return NextResponse.json(
-      { error: parsed.error.issues[0]?.message },
+      {
+        error:
+          parsed.error.issues[0]?.message ||
+          "Podaci za rezervaciju nijesu ispravni.",
+      },
       { status: 400 }
     );
   }
 
-  const { tourId, departureId, participants } = parsed.data;
+  const {
+    tourId,
+    departureId,
+    participants,
+    participantsInfo,
+  } = parsed.data;
+
+  // Broj unesenih osoba mora odgovarati broju rezervisanih mjesta
+  if (participantsInfo.length !== participants) {
+    return NextResponse.json(
+      {
+        error: `Morate unijeti podatke za svih ${participants} učesnika.`,
+      },
+      { status: 400 }
+    );
+  }
 
   const tour = await prisma.tour.findUnique({
     where: {
@@ -67,12 +100,12 @@ export async function POST(req: NextRequest) {
 
   if (!tour) {
     return NextResponse.json(
-      { error: "Tura nije pronađena" },
+      { error: "Tura nije pronađena." },
       { status: 404 }
     );
   }
 
-  // Vodič ne može rezervisati sopstvenu turu
+  // Vodič ne može rezervisati svoju turu
   if (tour.guideId === session!.userId) {
     return NextResponse.json(
       { error: "Ne možete rezervisati sopstvenu turu." },
@@ -88,12 +121,11 @@ export async function POST(req: NextRequest) {
 
   if (!departure) {
     return NextResponse.json(
-      { error: "Termin nije pronađen" },
+      { error: "Termin nije pronađen." },
       { status: 404 }
     );
   }
 
-  // Termin mora pripadati izabranoj turi
   if (departure.tourId !== tourId) {
     return NextResponse.json(
       { error: "Izabrani termin ne pripada ovoj turi." },
@@ -101,7 +133,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Provjera da korisnik već nema rezervaciju za isti termin
+  // Isti korisnik ne može ponovo rezervisati isti termin
   const existingBooking = await prisma.booking.findFirst({
     where: {
       userId: session!.userId,
@@ -114,10 +146,7 @@ export async function POST(req: NextRequest) {
 
   if (existingBooking) {
     return NextResponse.json(
-      {
-        error:
-          "Već imate rezervaciju za ovaj termin.",
-      },
+      { error: "Već imate rezervaciju za ovaj termin." },
       { status: 409 }
     );
   }
@@ -125,14 +154,18 @@ export async function POST(req: NextRequest) {
   if (departure.spotsLeft < participants) {
     return NextResponse.json(
       {
-        error: `Dostupno je samo ${departure.spotsLeft} mjesta`,
+        error: `Dostupno je samo ${departure.spotsLeft} mjesta.`,
       },
       { status: 400 }
     );
   }
 
-  const [booking] = await prisma.$transaction([
-    prisma.booking.create({
+  /*
+    Kreiramo rezervaciju i sve učesnike u jednoj transakciji.
+    Ako nešto ne uspije, ništa se neće djelimično upisati.
+  */
+  const booking = await prisma.$transaction(async (tx) => {
+    const newBooking = await tx.booking.create({
       data: {
         userId: session!.userId,
         tourId,
@@ -140,10 +173,20 @@ export async function POST(req: NextRequest) {
         participants,
         status: "CONFIRMED",
         totalPrice: tour.pricePerPerson * participants,
-      },
-    }),
 
-    prisma.tourDeparture.update({
+        participantsInfo: {
+          create: participantsInfo.map((person) => ({
+            fullName: person.fullName.trim(),
+            age: person.age,
+          })),
+        },
+      },
+      include: {
+        participantsInfo: true,
+      },
+    });
+
+    await tx.tourDeparture.update({
       where: {
         id: departureId,
       },
@@ -152,8 +195,10 @@ export async function POST(req: NextRequest) {
           decrement: participants,
         },
       },
-    }),
-  ]);
+    });
+
+    return newBooking;
+  });
 
   const user = await prisma.user.findUnique({
     where: {
@@ -169,7 +214,7 @@ export async function POST(req: NextRequest) {
     "BOOKING_CONFIRMED",
     `Nova rezervacija za "${tour.title}"`,
     `${user?.fullName} - ${participants} osoba`,
-    `/guide/bookings`
+    "/profile"
   );
 
   await createNotification(
@@ -177,7 +222,7 @@ export async function POST(req: NextRequest) {
     "BOOKING_CONFIRMED",
     "Rezervacija potvrđena!",
     tour.title,
-    "/bookings"
+    "/profile"
   );
 
   return NextResponse.json(
