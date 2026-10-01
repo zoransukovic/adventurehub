@@ -87,6 +87,8 @@ export default function ProfilePage() {
   const [editParticipants, setEditParticipants] = useState<{ fullName: string; age: number }[]>([]);
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(null);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadProfile() {
@@ -137,6 +139,7 @@ export default function ProfilePage() {
   function startEditBooking(booking: Booking) {
     setEditingBookingId(booking.id);
     setEditError(null);
+    setCancelError(null);
     const existing = booking.participantsInfo ?? [];
     setEditParticipants(
       existing.length
@@ -200,6 +203,61 @@ export default function ProfilePage() {
       setEditError("Došlo je do greške prilikom izmjene rezervacije.");
     } finally {
       setEditSaving(false);
+    }
+  }
+
+  async function cancelBooking(booking: Booking) {
+    const confirmed = window.confirm(
+      `Da li ste sigurni da želite otkazati rezervaciju za ${booking.participants} ${
+        booking.participants === 1 ? "osobu" : "osobe"
+      }? Rezervisana mjesta će ponovo biti dostupna.`
+    );
+
+    if (!confirmed) return;
+
+    setCancelError(null);
+    setCancellingBookingId(booking.id);
+
+    try {
+      const res = await fetch(`/api/bookings/${booking.id}`, {
+        method: "DELETE",
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setCancelError(
+          data.error || "Otkazivanje rezervacije nije uspjelo."
+        );
+        return;
+      }
+
+      setBookings((current) =>
+        current.map((item) =>
+          item.id === booking.id
+            ? {
+                ...item,
+                status: data.booking.status,
+                departure: data.booking.departure,
+                participantsInfo:
+                  data.booking.participantsInfo ?? item.participantsInfo,
+              }
+            : item
+        )
+      );
+
+      if (editingBookingId === booking.id) {
+        setEditingBookingId(null);
+        setEditParticipants([]);
+        setEditError(null);
+      }
+    } catch (error) {
+      console.error("Booking cancel error:", error);
+      setCancelError(
+        "Došlo je do greške prilikom otkazivanja rezervacije."
+      );
+    } finally {
+      setCancellingBookingId(null);
     }
   }
 
@@ -414,8 +472,12 @@ export default function ProfilePage() {
                     </div>
                   )}
 
+                  {cancelError && cancellingBookingId !== b.id && editable && (
+                    <p className="mt-2 text-sm text-red-600">{cancelError}</p>
+                  )}
+
                   {!editing && (
-                    <div className="mt-3 flex gap-2">
+                    <div className="mt-3 flex flex-wrap gap-2">
                       <Link
                         href={`/tours/${b.tour.id}`}
                         className="flex-1 rounded-lg border border-black/10 py-2 text-center text-xs text-foreground/60"
@@ -428,6 +490,18 @@ export default function ProfilePage() {
                           className="flex-1 rounded-lg bg-brand-light py-2 text-xs font-medium text-brand-dark"
                         >
                           ✏️ Izmijeni rezervaciju
+                        </button>
+                      )}
+                      {editable && (
+                        <button
+                          type="button"
+                          disabled={cancellingBookingId === b.id}
+                          onClick={() => cancelBooking(b)}
+                          className="flex-1 rounded-lg border border-red-200 py-2 text-xs font-medium text-red-500 disabled:opacity-50"
+                        >
+                          {cancellingBookingId === b.id
+                            ? "Otkazivanje..."
+                            : "🗑 Otkaži rezervaciju"}
                         </button>
                       )}
                       {b.status === "COMPLETED" && !b.review && (
