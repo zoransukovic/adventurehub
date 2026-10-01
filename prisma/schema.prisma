@@ -135,12 +135,14 @@ model Tour {
 }
 
 model TourDeparture {
-  id               String            @id @default(cuid())
-  tourId           String
-  tour             Tour              @relation(fields: [tourId], references: [id], onDelete: Cascade)
-  startsAt         DateTime
-  spotsLeft        Int
-  createdAt        DateTime          @default(now())
+  id          String   @id @default(cuid())
+  tourId      String
+  tour        Tour     @relation(fields: [tourId], references: [id], onDelete: Cascade)
+  startsAt    DateTime
+  bookingDeadline DateTime?
+  spotsLeft   Int
+  createdAt   DateTime @default(now())
+
   bookings         Booking[]
   trackingSessions TrackingSession[]
 
