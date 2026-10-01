@@ -5,6 +5,19 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import StarRating from "@/app/components/StarRating";
 import Navbar from "@/app/components/Navbar";
+import dynamic from "next/dynamic";
+
+const TourRouteMap = dynamic(
+  () => import("@/app/components/TourRouteMap"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-[380px] items-center justify-center rounded-xl bg-brand-light text-sm text-foreground/50">
+        Učitavanje mape...
+      </div>
+    ),
+  }
+);
 
 type Tour = {
   id: string;
@@ -31,6 +44,17 @@ type Tour = {
   };
 
   route: {
+    startLat: number;
+    startLng: number;
+    endLat: number;
+    endLng: number;
+    startLabel: string | null;
+    endLabel: string | null;
+    points: {
+      lat: number;
+      lng: number;
+      elevation?: number;
+    }[];
     distanceKm: number | null;
     estimatedMins: number | null;
     elevationGainM: number | null;
@@ -108,6 +132,7 @@ export default function TourPage() {
   });
 
   const [lang, setLang] = useState<"sr" | "en">("sr");
+  const [showRoute, setShowRoute] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -445,6 +470,71 @@ export default function TourPage() {
             : tour.descriptionEn ||
               tour.descriptionSr}
         </p>
+
+        {tour.route && tour.route.points.length >= 2 && (
+          <div className="mt-4 overflow-hidden rounded-2xl border border-black/10">
+            <div className="p-4">
+              <p className="text-sm font-medium">
+                🗺️ Planirana ruta
+              </p>
+
+              <div className="mt-2 flex flex-wrap gap-2">
+                {tour.route.distanceKm != null && (
+                  <span className="rounded-full bg-black/5 px-2.5 py-1 text-xs">
+                    🥾 {tour.route.distanceKm} km
+                  </span>
+                )}
+
+                {tour.route.elevationGainM != null && (
+                  <span className="rounded-full bg-black/5 px-2.5 py-1 text-xs">
+                    ↗ +{tour.route.elevationGainM} m
+                  </span>
+                )}
+
+                {tour.durationMinutes != null && (
+                  <span className="rounded-full bg-black/5 px-2.5 py-1 text-xs">
+                    ⏱ {Math.floor(tour.durationMinutes / 60)}h{" "}
+                    {tour.durationMinutes % 60}min
+                  </span>
+                )}
+              </div>
+
+              {tour.route.startLabel && (
+                <p className="mt-3 text-xs text-foreground/60">
+                  🟢 Početak: {tour.route.startLabel}
+                </p>
+              )}
+
+              {tour.route.endLabel && (
+                <p className="mt-1 text-xs text-foreground/60">
+                  🏁 Cilj: {tour.route.endLabel}
+                </p>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setShowRoute((v) => !v)}
+                className="mt-3 w-full rounded-xl bg-brand-light py-2.5 text-sm font-medium text-brand-dark"
+              >
+                {showRoute
+                  ? "▲ Sakrij rutu"
+                  : "🗺️ Prikaži rutu na mapi"}
+              </button>
+            </div>
+
+            {showRoute && (
+              <div className="border-t border-black/10 p-2">
+                <TourRouteMap
+                  points={tour.route.points}
+                  startLat={tour.route.startLat}
+                  startLng={tour.route.startLng}
+                  endLat={tour.route.endLat}
+                  endLng={tour.route.endLng}
+                />
+              </div>
+            )}
+          </div>
+        )}
 
         {tour.meetingPoint && (
           <div className="mt-3 rounded-xl bg-black/5 p-3 text-sm">
