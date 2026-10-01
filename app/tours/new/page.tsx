@@ -1,160 +1,129 @@
-"use client";
+                  onClick={addDeparture}
+                  className="mt-3 rounded-lg bg-brand-light px-4 py-2 text-sm font-medium text-brand-dark"
+                >
+                  + Dodaj prvi termin
+                </button>
+              </div>
+            )}
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import Navbar from "@/app/components/Navbar";
+            {departures.map((departure, index) => (
+              <div
+                key={index}
+                className="rounded-xl border border-black/10 p-3"
+              >
+                <p className="mb-3 text-sm font-medium">
+                  Termin {index + 1}
+                </p>
 
-type Activity = {
-  id: string;
-  name: string;
-};
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <label className="mb-1 block text-xs text-foreground/60">
+                      Datum i vrijeme polaska *
+                    </label>
 
-type Departure = {
-  startsAt: string;
-  bookingDeadline: string;
-  spotsLeft: number;
-};
+                    <input
+                      type="datetime-local"
+                      value={departure.startsAt}
+                      onChange={(e) =>
+                        setDepartures((items) =>
+                          items.map((item, i) =>
+                            i === index
+                              ? {
+                                  ...item,
+                                  startsAt: e.target.value,
+                                }
+                              : item
+                          )
+                        )
+                      }
+                      className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm outline-none focus:border-brand"
+                    />
+                  </div>
 
-export default function NewTourPage() {
-  const router = useRouter();
+                  <div>
+                    <label className="mb-1 block text-xs text-foreground/60">
+                      Rezervacije i izmjene moguće do *
+                    </label>
 
-  const [step, setStep] = useState(1);
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [errors, setErrors] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
+                    <input
+                      type="datetime-local"
+                      value={departure.bookingDeadline}
+                      onChange={(e) =>
+                        setDepartures((items) =>
+                          items.map((item, i) =>
+                            i === index
+                              ? {
+                                  ...item,
+                                  bookingDeadline: e.target.value,
+                                }
+                              : item
+                          )
+                        )
+                      }
+                      className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm outline-none focus:border-brand"
+                    />
 
-  const [form, setForm] = useState({
-    title: "",
-    descriptionSr: "",
-    descriptionEn: "",
-    activityTypeId: "",
-    pricePerPerson: 0,
-    maxParticipants: 8,
-    durationMinutes: 240,
-    difficulty: "MODERATE" as "EASY" | "MODERATE" | "HARD",
-    transportMode: "FOOT" as
-      | "FOOT"
-      | "BIKE"
-      | "CAR"
-      | "ATV"
-      | "KAYAK"
-      | "DIVING"
-      | "OTHER",
-    meetingPoint: "",
-    includesItems: [] as string[],
-  });
+                    <p className="mt-1 text-[11px] text-foreground/45">
+                      Poslije ovog vremena turista neće moći
+                      napraviti novu niti izmijeniti postojeću
+                      rezervaciju.
+                    </p>
+                  </div>
 
-  const [route, setRoute] = useState({
-    creationMode: "auto" as "auto" | "manual",
-    startLabel: "",
-    endLabel: "",
-    startLat: 42.44,
-    startLng: 18.87,
-    endLat: 43.14,
-    endLng: 19.01,
-    points: [] as { lat: number; lng: number }[],
-    distanceKm: 0,
-    elevationGainM: 0,
-    estimatedMins: 0,
-  });
+                  <div>
+                    <label className="mb-1 block text-xs text-foreground/60">
+                      Slobodna mjesta *
+                    </label>
 
-  const [departures, setDepartures] = useState<Departure[]>([]);
+                    <input
+                      type="number"
+                      min={1}
+                      max={form.maxParticipants}
+                      value={departure.spotsLeft}
+                      onChange={(e) =>
+                        setDepartures((items) =>
+                          items.map((item, i) =>
+                            i === index
+                              ? {
+                                  ...item,
+                                  spotsLeft: Number(
+                                    e.target.value
+                                  ),
+                                }
+                              : item
+                          )
+                        )
+                      }
+                      className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm outline-none focus:border-brand"
+                    />
 
-  useEffect(() => {
-    fetch("/api/activities")
-      .then((r) => r.json())
-      .then((d) => setActivities(d.activities ?? []))
-      .catch(() => {
-        setErrors(["Nije moguće učitati vrste aktivnosti."]);
-      });
-  }, []);
+                    <p className="mt-1 text-[11px] text-foreground/45">
+                      Maksimalno: {form.maxParticipants}
+                    </p>
+                  </div>
+                </div>
 
-  const INCLUDES = [
-    "Oprema",
-    "Vodič",
-    "Obrok",
-    "Prijevoz",
-    "Osiguranje",
-    "Foto/video",
-  ];
+                <button
+                  type="button"
+                  onClick={() => removeDeparture(index)}
+                  className="mt-3 text-xs text-red-500"
+                >
+                  Ukloni termin
+                </button>
+              </div>
+            ))}
 
-  const toggleInclude = (item: string) => {
-    setForm((f) => ({
-      ...f,
-      includesItems: f.includesItems.includes(item)
-        ? f.includesItems.filter((x) => x !== item)
-        : [...f.includesItems, item],
-    }));
-  };
+            <ErrorBox />
 
-  const addDeparture = () => {
-    setDepartures((d) => [
-      ...d,
-      {
-        startsAt: "",
-        bookingDeadline: "",
-        spotsLeft: form.maxParticipants,
-      },
-    ]);
-  };
+            <div className="mt-2 flex gap-2">
+              <button type="button" onClick={cancel} disabled={loading} className="rounded-xl border border-red-200 px-4 py-3 text-sm text-red-500 disabled:opacity-50">✕ Odustani</button>
+              <button type="button" onClick={() => goBack(2)} disabled={loading} className="flex-1 rounded-xl border border-black/10 py-3 text-sm text-foreground/70 disabled:opacity-50">← Nazad</button>
+              <button type="button" onClick={submit} disabled={loading} className="flex-1 rounded-xl bg-brand py-3 text-sm font-medium text-white disabled:opacity-60">{loading ? "Objavljivanje..." : "✓ Objavi turu"}</button>
+            </div>
 
-  const removeDeparture = (index: number) => {
-    setDepartures((d) => d.filter((_, i) => i !== index));
-  };
-
-  /*
-   * VALIDACIJA KORAKA 1
-   */
-  function validateStep1() {
-    const e: string[] = [];
-
-    if (!form.title.trim()) {
-      e.push("Unesite naziv ture.");
-    } else if (form.title.trim().length < 3) {
-      e.push("Naziv ture mora imati najmanje 3 karaktera.");
-    }
-
-    if (!form.activityTypeId) {
-      e.push("Izaberite vrstu aktivnosti.");
-    }
-
-    if (form.pricePerPerson <= 0) {
-      e.push("Unesite cijenu po osobi veću od 0 €.");
-    }
-
-    if (
-      !Number.isInteger(form.maxParticipants) ||
-      form.maxParticipants < 1
-    ) {
-      e.push("Maksimalan broj učesnika mora biti najmanje 1.");
-    }
-
-    if (!form.descriptionSr.trim()) {
-      e.push("Unesite opis ture na srpskom.");
-    } else if (form.descriptionSr.trim().length < 10) {
-      e.push("Opis ture mora imati najmanje 10 karaktera.");
-    }
-
-    setErrors(e);
-
-    return e.length === 0;
-  }
-
-  /*
-   * VALIDACIJA KORAKA 2
-   */
-  function validateStep2() {
-    const e: string[] = [];
-
-    if (
-      !Number.isFinite(route.startLat) ||
-      route.startLat < -90 ||
-      route.startLat > 90
-    ) {
-      e.push("Početna geografska širina nije ispravna.");
-    }
-
-    if (
-      !Number.isFinite(route.startLng) ||
-      route.startLng < -180 ||
-      route.startLng > 180
+            <p className="text-center text-[11px] text-foreground/40">
+              * Obavezna polja
+            </p>
+          </div>
+     );
+}
