@@ -125,5 +125,4 @@
               * Obavezna polja
             </p>
           </div>
-     );
-
+        )}
