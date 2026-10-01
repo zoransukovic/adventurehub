@@ -28,44 +28,50 @@ const routeSchema = z.object({
 });
 
 const departureSchema = z.object({
-  startsAt: z.string().min(1, "Datum polaska je obavezan"),
+  startsAt: z
+    .string()
+    .min(1, "Datum polaska je obavezan."),
 
   bookingDeadline: z
     .string()
-    .min(1, "Rok za rezervacije je obavezan"),
+    .min(1, "Rok za rezervacije je obavezan."),
 
   spotsLeft: z
     .number()
     .int()
-    .positive("Broj slobodnih mjesta mora biti veći od 0"),
+    .positive("Broj slobodnih mjesta mora biti veći od 0."),
 });
 
 const tourSchema = z.object({
   title: z
     .string()
-    .min(3, "Naziv ture mora imati najmanje 3 karaktera"),
+    .trim()
+    .min(3, "Naziv ture mora imati najmanje 3 karaktera."),
 
   descriptionSr: z
     .string()
-    .min(10, "Opis mora imati najmanje 10 karaktera"),
+    .trim()
+    .min(10, "Opis mora imati najmanje 10 karaktera."),
 
   descriptionEn: z.string().optional(),
 
-  activityTypeId: z.string(),
+  activityTypeId: z
+    .string()
+    .min(1, "Izaberite vrstu aktivnosti."),
 
   pricePerPerson: z
     .number()
-    .positive("Cijena mora biti veća od 0"),
+    .positive("Cijena mora biti veća od 0."),
 
   maxParticipants: z
     .number()
     .int()
-    .positive("Maksimalan broj učesnika mora biti veći od 0"),
+    .positive("Maksimalan broj učesnika mora biti veći od 0."),
 
   durationMinutes: z
     .number()
     .int()
-    .positive()
+    .positive("Trajanje mora biti veće od 0.")
     .optional(),
 
   difficulty: z
@@ -90,7 +96,7 @@ const tourSchema = z.object({
 
   departureDates: z
     .array(departureSchema)
-    .optional(),
+    .min(1, "Dodajte najmanje jedan termin polaska."),
 
   route: routeSchema,
 });
@@ -164,8 +170,7 @@ export async function GET(req: NextRequest) {
 
       avgRating: t.reviews.length
         ? t.reviews.reduce(
-            (sum, review) =>
-              sum + review.rating,
+            (sum, review) => sum + review.rating,
             0
           ) / t.reviews.length
         : null,
@@ -176,11 +181,13 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { error, session } =
-    await guard("GUIDE");
+  const { error, session } = await guard("GUIDE");
 
   if (error) return error;
 
+  /*
+   * 1. Provjera podataka koje je poslao frontend
+   */
   const body = tourSchema.safeParse(
     await req.json().catch(() => ({}))
   );
@@ -205,90 +212,158 @@ export async function POST(req: NextRequest) {
   } = body.data;
 
   /*
-   * Dodatna serverska kontrola termina.
+   * 2. Provjeri da izabrana vrsta aktivnosti
+   * stvarno postoji u bazi.
    *
-   * Ne oslanjamo se samo na frontend.
+   * Ovo sprečava Prisma P2003 foreign-key grešku.
    */
-  if (departureDates) {
-    for (
-      let i = 0;
-      i < departureDates.length;
-      i++
+  const activity = await prisma.activityType.findUnique({
+    where: {
+      id: tourData.activityTypeId,
+    },
+    select: {
+      id: true,
+      name: true,
+      active: true,
+    },
+  });
+
+  if (!activity) {
+    return NextResponse.json(
+      {
+        error:
+          "Izabrana vrsta aktivnosti ne postoji. Vratite se na prvi korak i izaberite aktivnost.",
+      },
+      {
+        status: 400,
+      }
+    );
+  }
+
+  /*
+   * Ako je aktivnost deaktivirana,
+   * ne dozvoljavamo kreiranje nove ture.
+   */
+  if (!activity.active) {
+    return NextResponse.json(
+      {
+        error: `Aktivnost "${activity.name}" trenutno nije dostupna.`,
+      },
+      {
+        status: 400,
+      }
+    );
+  }
+
+  /*
+   * 3. Serverska provjera svih termina
+   */
+  for (let i = 0; i < departureDates.length; i++) {
+    const departure = departureDates[i];
+
+    const startsAt = new Date(departure.startsAt);
+
+    const bookingDeadline = new Date(
+      departure.bookingDeadline
+    );
+
+    if (
+      Number.isNaN(startsAt.getTime()) ||
+      Number.isNaN(bookingDeadline.getTime())
     ) {
-      const departure = departureDates[i];
-
-      const startsAt = new Date(
-        departure.startsAt
+      return NextResponse.json(
+        {
+          error: `Termin ${
+            i + 1
+          }: datum ili vrijeme nije ispravno.`,
+        },
+        {
+          status: 400,
+        }
       );
+    }
 
-      const bookingDeadline = new Date(
-        departure.bookingDeadline
+    /*
+     * Ne dozvoljavamo termin u prošlosti.
+     */
+    if (startsAt.getTime() <= Date.now()) {
+      return NextResponse.json(
+        {
+          error: `Termin ${
+            i + 1
+          }: vrijeme polaska mora biti u budućnosti.`,
+        },
+        {
+          status: 400,
+        }
       );
+    }
 
-      if (
-        Number.isNaN(startsAt.getTime()) ||
-        Number.isNaN(
-          bookingDeadline.getTime()
-        )
-      ) {
-        return NextResponse.json(
-          {
-            error: `Datum termina ${
-              i + 1
-            } nije ispravan.`,
-          },
-          {
-            status: 400,
-          }
-        );
-      }
+    /*
+     * Rok mora biti prije polaska.
+     */
+    if (
+      bookingDeadline.getTime() >=
+      startsAt.getTime()
+    ) {
+      return NextResponse.json(
+        {
+          error: `Termin ${
+            i + 1
+          }: rok za rezervacije mora biti prije vremena polaska.`,
+        },
+        {
+          status: 400,
+        }
+      );
+    }
 
-      /*
-       * Rok za rezervacije mora biti
-       * prije vremena polaska.
-       */
-      if (
-        bookingDeadline.getTime() >=
-        startsAt.getTime()
-      ) {
-        return NextResponse.json(
-          {
-            error:
-              `Rok za rezervacije za termin ${
-                i + 1
-              } mora biti prije vremena polaska.`,
-          },
-          {
-            status: 400,
-          }
-        );
-      }
+    /*
+     * Rok za rezervacije takođe treba
+     * da bude u budućnosti.
+     */
+    if (
+      bookingDeadline.getTime() <=
+      Date.now()
+    ) {
+      return NextResponse.json(
+        {
+          error: `Termin ${
+            i + 1
+          }: rok za rezervacije mora biti u budućnosti.`,
+        },
+        {
+          status: 400,
+        }
+      );
+    }
 
-      /*
-       * Ne dozvoljavamo više mjesta
-       * nego što tura ukupno dozvoljava.
-       */
-      if (
-        departure.spotsLeft >
-        tourData.maxParticipants
-      ) {
-        return NextResponse.json(
-          {
-            error:
-              `Broj mjesta za termin ${
-                i + 1
-              } ne može biti veći od maksimalnog broja učesnika (${tourData.maxParticipants}).`,
-          },
-          {
-            status: 400,
-          }
-        );
-      }
+    /*
+     * Broj mjesta ne može biti veći
+     * od maksimalnog kapaciteta ture.
+     */
+    if (
+      departure.spotsLeft >
+      tourData.maxParticipants
+    ) {
+      return NextResponse.json(
+        {
+          error: `Termin ${
+            i + 1
+          }: broj slobodnih mjesta ne može biti veći od maksimalnog broja učesnika (${tourData.maxParticipants}).`,
+        },
+        {
+          status: 400,
+        }
+      );
     }
   }
 
-  const tour =
-    await prisma.tour.create({
+  /*
+   * 4. Kreiranje ture
+   */
+  try {
+    const tour = await prisma.tour.create({
       data: {
         ...tourData,
 
@@ -297,34 +372,26 @@ export async function POST(req: NextRequest) {
         route: {
           create: {
             ...route,
-            points:
-              route.points as never,
+            points: route.points as never,
           },
         },
 
-        departures:
-          departureDates &&
-          departureDates.length > 0
-            ? {
-                create:
-                  departureDates.map(
-                    (departure) => ({
-                      startsAt:
-                        new Date(
-                          departure.startsAt
-                        ),
+        departures: {
+          create: departureDates.map(
+            (departure) => ({
+              startsAt: new Date(
+                departure.startsAt
+              ),
 
-                      bookingDeadline:
-                        new Date(
-                          departure.bookingDeadline
-                        ),
+              bookingDeadline: new Date(
+                departure.bookingDeadline
+              ),
 
-                      spotsLeft:
-                        departure.spotsLeft,
-                    })
-                  ),
-              }
-            : undefined,
+              spotsLeft:
+                departure.spotsLeft,
+            })
+          ),
+        },
       },
 
       include: {
@@ -334,12 +401,28 @@ export async function POST(req: NextRequest) {
       },
     });
 
-  return NextResponse.json(
-    {
-      tour,
-    },
-    {
-      status: 201,
-    }
-  );
+    return NextResponse.json(
+      {
+        tour,
+      },
+      {
+        status: 201,
+      }
+    );
+  } catch (err) {
+    console.error(
+      "Greška pri kreiranju ture:",
+      err
+    );
+
+    return NextResponse.json(
+      {
+        error:
+          "Došlo je do greške prilikom čuvanja ture. Pokušajte ponovo.",
+      },
+      {
+        status: 500,
+      }
+    );
+  }
 }
