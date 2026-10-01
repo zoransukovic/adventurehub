@@ -30,26 +30,87 @@ type Booking = {
   review: { id: string } | null;
 };
 
+type GuideBooking = {
+  id: string;
+  participants: number;
+  status: string;
+  totalPrice: number;
+  createdAt: string;
+  user: {
+    id: string;
+    fullName: string;
+    email: string;
+    phone: string | null;
+    country: string | null;
+  };
+};
+
+type GuideDeparture = {
+  id: string;
+  startsAt: string;
+  spotsLeft: number;
+  bookings: GuideBooking[];
+};
+
+type GuideTour = {
+  id: string;
+  title: string;
+  maxParticipants: number;
+  pricePerPerson: number;
+  active: boolean;
+  activityType: {
+    id: string;
+    name: string;
+    nameEn: string | null;
+  };
+  departures: GuideDeparture[];
+};
+
 export default function ProfilePage() {
   const router = useRouter();
 
   const [user, setUser] = useState<User>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
-  const [tab, setTab] = useState<"bookings" | "settings">("bookings");
+  const [guideTours, setGuideTours] = useState<GuideTour[]>([]);
+  const [tab, setTab] = useState<"main" | "settings">("main");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([
-      fetch("/api/auth/me").then((r) => r.json()),
-      fetch("/api/bookings").then((r) => r.json()),
-    ]).then(([m, b]) => {
-      if (!m.user) {
-        router.push("/login");
-        return;
-      }
+    async function loadProfile() {
+      try {
+        const meRes = await fetch("/api/auth/me");
+        const me = await meRes.json();
 
-      setUser(m.user);
-      setBookings(b.bookings ?? []);
-    });
+        if (!me.user) {
+          router.push("/login");
+          return;
+        }
+
+        setUser(me.user);
+
+        if (me.user.role === "GUIDE") {
+          const toursRes = await fetch("/api/guide/tours");
+          const toursData = await toursRes.json();
+
+          if (toursRes.ok) {
+            setGuideTours(toursData.tours ?? []);
+          }
+        } else {
+          const bookingsRes = await fetch("/api/bookings");
+          const bookingsData = await bookingsRes.json();
+
+          if (bookingsRes.ok) {
+            setBookings(bookingsData.bookings ?? []);
+          }
+        }
+      } catch (error) {
+        console.error("Profile load error:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadProfile();
   }, [router]);
 
   async function logout() {
@@ -64,13 +125,33 @@ export default function ProfilePage() {
     COMPLETED: "🏁 Završena",
   };
 
-  if (!user) {
+  function formatDate(date: string) {
+    return new Date(date).toLocaleDateString("sr-Latn", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+  }
+
+  function formatDateTime(date: string) {
+    return new Date(date).toLocaleString("sr-Latn", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  if (loading || !user) {
     return (
       <div className="flex min-h-screen items-center justify-center text-foreground/40">
         Učitavanje...
       </div>
     );
   }
+
+  const isGuide = user.role === "GUIDE";
 
   return (
     <div className="min-h-screen pb-20">
@@ -94,7 +175,7 @@ export default function ProfilePage() {
           · {user.country ?? ""}
         </p>
 
-        {user.role === "GUIDE" && (
+        {isGuide && (
           <p className="mt-1 text-xs text-white/60">
             {user.guideStatus === "APPROVED"
               ? "✓ Odobreni vodič"
@@ -107,14 +188,16 @@ export default function ProfilePage() {
 
       <div className="flex border-b border-black/8">
         <button
-          onClick={() => setTab("bookings")}
+          onClick={() => setTab("main")}
           className={`flex-1 py-3 text-sm ${
-            tab === "bookings"
+            tab === "main"
               ? "border-b-2 border-brand font-medium text-brand"
               : "text-foreground/50"
           }`}
         >
-          Rezervacije ({bookings.length})
+          {isGuide
+            ? `Moje ture (${guideTours.length})`
+            : `Rezervacije (${bookings.length})`}
         </button>
 
         <button
@@ -130,7 +213,7 @@ export default function ProfilePage() {
       </div>
 
       <div className="p-4">
-        {tab === "bookings" && (
+        {tab === "main" && !isGuide && (
           <>
             {bookings.length === 0 && (
               <p className="py-8 text-center text-sm text-foreground/40">
@@ -145,7 +228,7 @@ export default function ProfilePage() {
               >
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="font-medium text-sm">{b.tour.title}</p>
+                    <p className="text-sm font-medium">{b.tour.title}</p>
 
                     <p className="mt-0.5 text-xs text-foreground/50">
                       {b.tour.activityType.name} · {b.participants} osoba
@@ -153,22 +236,12 @@ export default function ProfilePage() {
                   </div>
 
                   <span className="shrink-0 text-xs">
-                    {STATUS[b.status]}
+                    {STATUS[b.status] ?? b.status}
                   </span>
                 </div>
 
                 <div className="mt-2 flex items-center justify-between text-xs text-foreground/50">
-                  <span>
-                    📅{" "}
-                    {new Date(b.departure.startsAt).toLocaleDateString(
-                      "sr-Latn",
-                      {
-                        day: "numeric",
-                        month: "long",
-                        year: "numeric",
-                      }
-                    )}
-                  </span>
+                  <span>📅 {formatDate(b.departure.startsAt)}</span>
 
                   <span className="font-medium text-brand-dark">
                     €{b.totalPrice.toFixed(2)}
@@ -197,6 +270,177 @@ export default function ProfilePage() {
           </>
         )}
 
+        {tab === "main" && isGuide && (
+          <>
+            {guideTours.length === 0 && (
+              <div className="py-8 text-center">
+                <p className="text-sm text-foreground/40">
+                  Još nemate kreiranih tura.
+                </p>
+
+                {user.guideStatus === "APPROVED" && (
+                  <Link
+                    href="/tours/new"
+                    className="mt-4 inline-block rounded-xl bg-brand px-5 py-3 text-sm font-medium text-white"
+                  >
+                    ➕ Kreiraj prvu turu
+                  </Link>
+                )}
+              </div>
+            )}
+
+            {guideTours.map((tour) => (
+              <div
+                key={tour.id}
+                className="mb-5 rounded-xl border border-black/8 p-4"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-base font-medium">{tour.title}</p>
+
+                    <p className="mt-0.5 text-xs text-foreground/50">
+                      {tour.activityType.name}
+                    </p>
+                  </div>
+
+                  <span
+                    className={`rounded-full px-2 py-1 text-xs ${
+                      tour.active
+                        ? "bg-brand-light text-brand-dark"
+                        : "bg-black/5 text-foreground/50"
+                    }`}
+                  >
+                    {tour.active ? "Aktivna" : "Neaktivna"}
+                  </span>
+                </div>
+
+                {tour.departures.length === 0 && (
+                  <p className="mt-4 rounded-lg bg-black/5 p-3 text-sm text-foreground/50">
+                    Ova tura nema termina.
+                  </p>
+                )}
+
+                {tour.departures.map((departure) => {
+                  const registered = departure.bookings.reduce(
+                    (sum, booking) => sum + booking.participants,
+                    0
+                  );
+
+                  return (
+                    <div
+                      key={departure.id}
+                      className="mt-4 rounded-xl bg-black/[0.025] p-3"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-medium">
+                            📅 {formatDateTime(departure.startsAt)}
+                          </p>
+
+                          <p className="mt-1 text-xs text-foreground/50">
+                            Slobodno: {departure.spotsLeft} mjesta
+                          </p>
+                        </div>
+
+                        <div className="rounded-lg bg-brand-light px-3 py-2 text-sm font-medium text-brand-dark">
+                          👥 {registered} / {tour.maxParticipants}
+                        </div>
+                      </div>
+
+                      <div className="mt-4 border-t border-black/8 pt-3">
+                        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-foreground/50">
+                          Prijavljeni učesnici
+                        </p>
+
+                        {departure.bookings.length === 0 ? (
+                          <p className="py-3 text-sm text-foreground/40">
+                            Još nema prijavljenih učesnika.
+                          </p>
+                        ) : (
+                          <div className="flex flex-col gap-2">
+                            {departure.bookings.map((booking) => (
+                              <div
+                                key={booking.id}
+                                className="rounded-lg border border-black/8 bg-white p-3"
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-sm font-medium">
+                                      {booking.user.fullName}
+                                    </p>
+
+                                    <p className="mt-0.5 text-xs text-foreground/50">
+                                      {booking.user.email}
+                                    </p>
+
+                                    {booking.user.phone && (
+                                      <p className="mt-0.5 text-xs text-foreground/50">
+                                        📞 {booking.user.phone}
+                                      </p>
+                                    )}
+
+                                    {booking.user.country && (
+                                      <p className="mt-0.5 text-xs text-foreground/50">
+                                        {booking.user.country}
+                                      </p>
+                                    )}
+                                  </div>
+
+                                  <div className="text-right">
+                                    <p className="text-sm font-medium">
+                                      {booking.participants}{" "}
+                                      {booking.participants === 1
+                                        ? "osoba"
+                                        : "osobe"}
+                                    </p>
+
+                                    <p className="mt-1 text-xs text-foreground/50">
+                                      {STATUS[booking.status] ??
+                                        booking.status}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        <div className="mt-3 flex items-center justify-between border-t border-black/8 pt-3 text-sm">
+                          <span className="text-foreground/60">
+                            Ukupno prijavljeno
+                          </span>
+
+                          <span className="font-medium">
+                            {registered}{" "}
+                            {registered === 1 ? "osoba" : "osobe"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                <Link
+                  href={`/tours/${tour.id}`}
+                  className="mt-4 block w-full rounded-lg border border-black/10 py-2.5 text-center text-sm text-foreground/60"
+                >
+                  Pogledaj turu
+                </Link>
+              </div>
+            ))}
+
+            {user.guideStatus === "APPROVED" &&
+              guideTours.length > 0 && (
+                <Link
+                  href="/tours/new"
+                  className="block w-full rounded-xl bg-brand py-3 text-center text-sm font-medium text-white"
+                >
+                  ➕ Dodaj novu turu
+                </Link>
+              )}
+          </>
+        )}
+
         {tab === "settings" && (
           <div className="flex flex-col gap-1">
             {[
@@ -212,7 +456,10 @@ export default function ProfilePage() {
                 key={r.label}
                 className="flex items-center justify-between border-b border-black/8 py-3"
               >
-                <span className="text-sm text-foreground/60">{r.label}</span>
+                <span className="text-sm text-foreground/60">
+                  {r.label}
+                </span>
+
                 <span className="text-sm font-medium">{r.value}</span>
               </div>
             ))}
@@ -233,15 +480,14 @@ export default function ProfilePage() {
               </Link>
             )}
 
-            {user.role === "GUIDE" &&
-              user.guideStatus === "APPROVED" && (
-                <Link
-                  href="/tours/new"
-                  className="mt-4 block w-full rounded-xl bg-brand-light py-3 text-center text-sm font-medium text-brand-dark"
-                >
-                  ➕ Dodaj novu turu
-                </Link>
-              )}
+            {isGuide && user.guideStatus === "APPROVED" && (
+              <Link
+                href="/tours/new"
+                className="mt-4 block w-full rounded-xl bg-brand-light py-3 text-center text-sm font-medium text-brand-dark"
+              >
+                ➕ Dodaj novu turu
+              </Link>
+            )}
 
             <button
               onClick={logout}
