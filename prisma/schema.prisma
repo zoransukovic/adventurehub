@@ -181,7 +181,9 @@ model Booking {
   status       BookingStatus @default(PENDING)
   totalPrice   Float
   createdAt    DateTime      @default(now())
-  review       Review?
+
+  review           Review?
+  participantsInfo BookingParticipant[]
 
   @@index([userId])
   @@index([tourId])
