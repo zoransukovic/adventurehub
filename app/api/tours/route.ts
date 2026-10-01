@@ -4,60 +4,342 @@ import { guard } from "@/lib/guard";
 import { z } from "zod";
 
 const routeSchema = z.object({
-  creationMode: z.enum(["auto","manual"]),
-  startLabel: z.string().optional(), endLabel: z.string().optional(),
-  startLat: z.number(), startLng: z.number(), endLat: z.number(), endLng: z.number(),
-  points: z.array(z.object({ lat: z.number(), lng: z.number(), elevation: z.number().optional() })),
-  distanceKm: z.number().optional(), elevationGainM: z.number().optional(), estimatedMins: z.number().optional(),
+  creationMode: z.enum(["auto", "manual"]),
+
+  startLabel: z.string().optional(),
+  endLabel: z.string().optional(),
+
+  startLat: z.number(),
+  startLng: z.number(),
+  endLat: z.number(),
+  endLng: z.number(),
+
+  points: z.array(
+    z.object({
+      lat: z.number(),
+      lng: z.number(),
+      elevation: z.number().optional(),
+    })
+  ),
+
+  distanceKm: z.number().optional(),
+  elevationGainM: z.number().optional(),
+  estimatedMins: z.number().optional(),
 });
+
+const departureSchema = z.object({
+  startsAt: z.string().min(1, "Datum polaska je obavezan"),
+
+  bookingDeadline: z
+    .string()
+    .min(1, "Rok za rezervacije je obavezan"),
+
+  spotsLeft: z
+    .number()
+    .int()
+    .positive("Broj slobodnih mjesta mora biti veći od 0"),
+});
+
 const tourSchema = z.object({
-  title: z.string().min(3), descriptionSr: z.string().min(10), descriptionEn: z.string().optional(),
-  activityTypeId: z.string(), pricePerPerson: z.number().positive(), maxParticipants: z.number().int().positive(),
-  durationMinutes: z.number().int().positive().optional(),
-  difficulty: z.enum(["EASY","MODERATE","HARD"]).default("MODERATE"),
-  transportMode: z.enum(["FOOT","BIKE","CAR","ATV","KAYAK","DIVING","OTHER"]),
-  meetingPoint: z.string().optional(), includesItems: z.array(z.string()).default([]),
-  departureDates: z.array(z.object({ startsAt: z.string(), spotsLeft: z.number().int() })).optional(),
+  title: z
+    .string()
+    .min(3, "Naziv ture mora imati najmanje 3 karaktera"),
+
+  descriptionSr: z
+    .string()
+    .min(10, "Opis mora imati najmanje 10 karaktera"),
+
+  descriptionEn: z.string().optional(),
+
+  activityTypeId: z.string(),
+
+  pricePerPerson: z
+    .number()
+    .positive("Cijena mora biti veća od 0"),
+
+  maxParticipants: z
+    .number()
+    .int()
+    .positive("Maksimalan broj učesnika mora biti veći od 0"),
+
+  durationMinutes: z
+    .number()
+    .int()
+    .positive()
+    .optional(),
+
+  difficulty: z
+    .enum(["EASY", "MODERATE", "HARD"])
+    .default("MODERATE"),
+
+  transportMode: z.enum([
+    "FOOT",
+    "BIKE",
+    "CAR",
+    "ATV",
+    "KAYAK",
+    "DIVING",
+    "OTHER",
+  ]),
+
+  meetingPoint: z.string().optional(),
+
+  includesItems: z
+    .array(z.string())
+    .default([]),
+
+  departureDates: z
+    .array(departureSchema)
+    .optional(),
+
   route: routeSchema,
 });
 
 export async function GET(req: NextRequest) {
   const sp = new URL(req.url).searchParams;
+
   const tours = await prisma.tour.findMany({
     where: {
       active: true,
-      activityTypeId: sp.get("activityTypeId") || undefined,
-      title: sp.get("search") ? { contains: sp.get("search")!, mode: "insensitive" } : undefined,
+
+      activityTypeId:
+        sp.get("activityTypeId") || undefined,
+
+      title: sp.get("search")
+        ? {
+            contains: sp.get("search")!,
+            mode: "insensitive",
+          }
+        : undefined,
     },
+
     include: {
       activityType: true,
-      guide: { select: { id:true, fullName:true, avatarUrl:true, guideCertified:true } },
-      route: { select: { distanceKm:true, estimatedMins:true } },
-      reviews: { select: { rating:true } },
-      departures: { where: { startsAt: { gte: new Date() } }, orderBy: { startsAt:"asc" }, take: 1 },
+
+      guide: {
+        select: {
+          id: true,
+          fullName: true,
+          avatarUrl: true,
+          guideCertified: true,
+        },
+      },
+
+      route: {
+        select: {
+          distanceKm: true,
+          estimatedMins: true,
+        },
+      },
+
+      reviews: {
+        select: {
+          rating: true,
+        },
+      },
+
+      departures: {
+        where: {
+          startsAt: {
+            gte: new Date(),
+          },
+        },
+
+        orderBy: {
+          startsAt: "asc",
+        },
+
+        take: 1,
+      },
     },
-    orderBy: { createdAt: "desc" },
+
+    orderBy: {
+      createdAt: "desc",
+    },
   });
-  return NextResponse.json({ tours: tours.map(t => ({
-    ...t,
-    avgRating: t.reviews.length ? t.reviews.reduce((s,r) => s+r.rating, 0)/t.reviews.length : null,
-    reviewCount: t.reviews.length,
-  }))});
+
+  return NextResponse.json({
+    tours: tours.map((t) => ({
+      ...t,
+
+      avgRating: t.reviews.length
+        ? t.reviews.reduce(
+            (sum, review) =>
+              sum + review.rating,
+            0
+          ) / t.reviews.length
+        : null,
+
+      reviewCount: t.reviews.length,
+    })),
+  });
 }
 
 export async function POST(req: NextRequest) {
-  const { error, session } = await guard("GUIDE");
+  const { error, session } =
+    await guard("GUIDE");
+
   if (error) return error;
-  const b = tourSchema.safeParse(await req.json().catch(() => ({})));
-  if (!b.success) return NextResponse.json({ error: b.error.issues[0]?.message }, { status: 400 });
-  const { route, departureDates, ...tourData } = b.data;
-  const tour = await prisma.tour.create({
-    data: {
-      ...tourData, guideId: session!.userId,
-      route: { create: { ...route, points: route.points as never } },
-      departures: departureDates ? { create: departureDates.map(d => ({ startsAt: new Date(d.startsAt), spotsLeft: d.spotsLeft })) } : undefined,
+
+  const body = tourSchema.safeParse(
+    await req.json().catch(() => ({}))
+  );
+
+  if (!body.success) {
+    return NextResponse.json(
+      {
+        error:
+          body.error.issues[0]?.message ||
+          "Podaci nijesu ispravni.",
+      },
+      {
+        status: 400,
+      }
+    );
+  }
+
+  const {
+    route,
+    departureDates,
+    ...tourData
+  } = body.data;
+
+  /*
+   * Dodatna serverska kontrola termina.
+   *
+   * Ne oslanjamo se samo na frontend.
+   */
+  if (departureDates) {
+    for (
+      let i = 0;
+      i < departureDates.length;
+      i++
+    ) {
+      const departure = departureDates[i];
+
+      const startsAt = new Date(
+        departure.startsAt
+      );
+
+      const bookingDeadline = new Date(
+        departure.bookingDeadline
+      );
+
+      if (
+        Number.isNaN(startsAt.getTime()) ||
+        Number.isNaN(
+          bookingDeadline.getTime()
+        )
+      ) {
+        return NextResponse.json(
+          {
+            error: `Datum termina ${
+              i + 1
+            } nije ispravan.`,
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      /*
+       * Rok za rezervacije mora biti
+       * prije vremena polaska.
+       */
+      if (
+        bookingDeadline.getTime() >=
+        startsAt.getTime()
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              `Rok za rezervacije za termin ${
+                i + 1
+              } mora biti prije vremena polaska.`,
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      /*
+       * Ne dozvoljavamo više mjesta
+       * nego što tura ukupno dozvoljava.
+       */
+      if (
+        departure.spotsLeft >
+        tourData.maxParticipants
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              `Broj mjesta za termin ${
+                i + 1
+              } ne može biti veći od maksimalnog broja učesnika (${tourData.maxParticipants}).`,
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+    }
+  }
+
+  const tour =
+    await prisma.tour.create({
+      data: {
+        ...tourData,
+
+        guideId: session!.userId,
+
+        route: {
+          create: {
+            ...route,
+            points:
+              route.points as never,
+          },
+        },
+
+        departures:
+          departureDates &&
+          departureDates.length > 0
+            ? {
+                create:
+                  departureDates.map(
+                    (departure) => ({
+                      startsAt:
+                        new Date(
+                          departure.startsAt
+                        ),
+
+                      bookingDeadline:
+                        new Date(
+                          departure.bookingDeadline
+                        ),
+
+                      spotsLeft:
+                        departure.spotsLeft,
+                    })
+                  ),
+              }
+            : undefined,
+      },
+
+      include: {
+        route: true,
+        activityType: true,
+        departures: true,
+      },
+    });
+
+  return NextResponse.json(
+    {
+      tour,
     },
-    include: { route: true, activityType: true, departures: true },
-  });
-  return NextResponse.json({ tour }, { status: 201 });
+    {
+      status: 201,
+    }
+  );
 }
