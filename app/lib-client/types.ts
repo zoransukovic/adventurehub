@@ -5,11 +5,18 @@ export type ActivityType = {
   icon: string;
 };
 
+export type TourRoutePoint = {
+  lat: number;
+  lng: number;
+  elevation?: number;
+};
+
 export type TourListItem = {
   id: string;
   title: string;
   pricePerPerson: number;
   maxParticipants: number;
+
   difficulty: string;
   transportMode: string;
 
@@ -21,11 +28,31 @@ export type TourListItem = {
     guideCertified: boolean;
   };
 
+  /*
+   * Kompletni podaci rute.
+   * Koriste ih Dashboard i ToursMap.
+   */
   route: {
+    startLat: number;
+    startLng: number;
+
+    endLat: number;
+    endLng: number;
+
+    startLabel: string | null;
+    endLabel: string | null;
+
+    points: TourRoutePoint[];
+
     distanceKm: number | null;
+    elevationGainM: number | null;
     estimatedMins: number | null;
   } | null;
 
+  /*
+   * Fotografije su sortirane:
+   * position 0 = naslovna.
+   */
   images: {
     id: string;
     url: string;
@@ -46,6 +73,11 @@ export type CurrentUser = {
   id: string;
   email: string;
   fullName: string;
-  role: "TOURIST" | "GUIDE" | "ADMIN";
+
+  role:
+    | "TOURIST"
+    | "GUIDE"
+    | "ADMIN";
+
   guideStatus: string | null;
 } | null;
