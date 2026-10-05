@@ -128,6 +128,7 @@ model Tour {
   bookings        Booking[]
   reviews         Review[]
   favorites       Favorite[]
+  images          TourImage[]
 
   @@index([activityTypeId])
   @@index([guideId])
