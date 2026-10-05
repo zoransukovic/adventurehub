@@ -1,70 +1,74 @@
-import {
-  handleUpload,
-  type HandleUploadBody,
-} from "@vercel/blob/client";
-
 import { NextResponse } from "next/server";
+import { put } from "@vercel/blob";
 import { guard } from "@/lib/guard";
+
+const MAX_SIZE = 4 * 1024 * 1024;
 
 export async function POST(request: Request) {
   try {
-    /*
-     * Korisnik mora biti prijavljen.
-     */
     const { error } = await guard();
 
     if (error) {
       return error;
     }
 
-    const body =
-      (await request.json()) as HandleUploadBody;
+    const formData = await request.formData();
 
-    const jsonResponse =
-      await handleUpload({
-        body,
-        request,
+    const file = formData.get("file");
 
-        onBeforeGenerateToken: async (
-          pathname
-        ) => {
-          console.log(
-            "Generating Blob upload token:",
-            pathname
-          );
-
-          return {
-            allowedContentTypes: [
-              "image/jpeg",
-              "image/png",
-              "image/webp",
-              "image/heic",
-              "image/heif",
-            ],
-
-            maximumSizeInBytes:
-              10 * 1024 * 1024,
-
-            addRandomSuffix: true,
-          };
+    if (!(file instanceof File)) {
+      return NextResponse.json(
+        {
+          error: "Fotografija nije pronađena.",
         },
+        {
+          status: 400,
+        }
+      );
+    }
 
-        onUploadCompleted: async ({
-          blob,
-        }) => {
-          console.log(
-            "Tour image uploaded:",
-            blob.url
-          );
+    if (!file.type.startsWith("image/")) {
+      return NextResponse.json(
+        {
+          error: "Dozvoljene su samo fotografije.",
         },
-      });
+        {
+          status: 400,
+        }
+      );
+    }
 
-    return NextResponse.json(
-      jsonResponse
+    if (file.size > MAX_SIZE) {
+      return NextResponse.json(
+        {
+          error:
+            "Fotografija može imati najviše 4 MB.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const safeName = file.name
+      .replace(/[^a-zA-Z0-9._-]/g, "-")
+      .toLowerCase();
+
+    const blob = await put(
+      `tours/${Date.now()}-${safeName}`,
+      file,
+      {
+        access: "public",
+        addRandomSuffix: true,
+      }
     );
+
+    return NextResponse.json({
+      url: blob.url,
+    });
   } catch (error) {
     console.error(
-      "BLOB UPLOAD ERROR:",
+      "BLOB SERVER UPLOAD ERROR:",
       error
     );
 
@@ -76,7 +80,7 @@ export async function POST(request: Request) {
             : "Upload fotografije nije uspio.",
       },
       {
-        status: 400,
+        status: 500,
       }
     );
   }
