@@ -3,6 +3,11 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/app/components/Navbar";
+import TourImageUploader, {
+  type TourImageData,
+} from "@/app/components/TourImageUploader";
+
+
 
 import dynamic from "next/dynamic";
 
@@ -39,6 +44,7 @@ export default function NewTourPage() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [images, setImages] = useState<TourImageData[]>([]);
 
   const [form, setForm] = useState({
     title: "",
@@ -331,11 +337,12 @@ function cancel() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          ...form,
-          route,
-          departureDates: departures,
-        }),
+       body: JSON.stringify({
+  ...form,
+  route,
+  departureDates: departures,
+  images,
+}),
       });
 
       let data: any = null;
@@ -660,8 +667,15 @@ function cancel() {
               />
             </div>
 
+            <div className="mt-2">
+  <TourImageUploader
+    images={images}
+    onChange={setImages}
+  />
+</div>
             <ErrorBox />
 
+            
             <div className="mt-2 flex gap-2">
               <button type="button" onClick={cancel} className="flex-1 rounded-xl border border-red-200 py-3 text-sm text-red-500">✕ Odustani</button>
               <button type="button" onClick={goToStep2} className="flex-1 rounded-xl bg-brand py-3 text-sm font-medium text-white">Dalje: Ruta →</button>
