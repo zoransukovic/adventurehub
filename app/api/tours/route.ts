@@ -39,19 +39,27 @@ const departureSchema = z.object({
   spotsLeft: z
     .number()
     .int()
-    .positive("Broj slobodnih mjesta mora biti veći od 0."),
+    .positive(
+      "Broj slobodnih mjesta mora biti veći od 0."
+    ),
 });
 
 const tourSchema = z.object({
   title: z
     .string()
     .trim()
-    .min(3, "Naziv ture mora imati najmanje 3 karaktera."),
+    .min(
+      3,
+      "Naziv ture mora imati najmanje 3 karaktera."
+    ),
 
   descriptionSr: z
     .string()
     .trim()
-    .min(10, "Opis mora imati najmanje 10 karaktera."),
+    .min(
+      10,
+      "Opis mora imati najmanje 10 karaktera."
+    ),
 
   descriptionEn: z.string().optional(),
 
@@ -66,12 +74,16 @@ const tourSchema = z.object({
   maxParticipants: z
     .number()
     .int()
-    .positive("Maksimalan broj učesnika mora biti veći od 0."),
+    .positive(
+      "Maksimalan broj učesnika mora biti veći od 0."
+    ),
 
   durationMinutes: z
     .number()
     .int()
-    .positive("Trajanje mora biti veće od 0.")
+    .positive(
+      "Trajanje mora biti veće od 0."
+    )
     .optional(),
 
   difficulty: z
@@ -96,108 +108,153 @@ const tourSchema = z.object({
 
   departureDates: z
     .array(departureSchema)
-    .min(1, "Dodajte najmanje jedan termin polaska."),
+    .min(
+      1,
+      "Dodajte najmanje jedan termin polaska."
+    ),
 
   route: routeSchema,
 });
 
+/*
+ * GET /api/tours
+ *
+ * Vraća aktivne ture.
+ *
+ * Učitavamo:
+ * - tip aktivnosti
+ * - vodiča
+ * - fotografije
+ * - rutu
+ * - ocjene
+ * - prvi naredni termin
+ */
 export async function GET(req: NextRequest) {
-  const sp = new URL(req.url).searchParams;
+  const sp =
+    new URL(req.url).searchParams;
 
-  const tours = await prisma.tour.findMany({
-    where: {
-      active: true,
+  const tours =
+    await prisma.tour.findMany({
+      where: {
+        active: true,
 
-      activityTypeId:
-        sp.get("activityTypeId") || undefined,
+        activityTypeId:
+          sp.get("activityTypeId") ||
+          undefined,
 
-      title: sp.get("search")
-        ? {
-            contains: sp.get("search")!,
-            mode: "insensitive",
-          }
-        : undefined,
-    },
-
-    include: {
-      activityType: true,
-
-      guide: {
-        select: {
-          id: true,
-          fullName: true,
-          avatarUrl: true,
-          guideCertified: true,
-        },
+        title: sp.get("search")
+          ? {
+              contains:
+                sp.get("search")!,
+              mode: "insensitive",
+            }
+          : undefined,
       },
 
-      /*
-       * Podaci rute potrebni za prikaz
-       * ture na interaktivnoj mapi.
-       */
-      route: {
-        select: {
-          startLat: true,
-          startLng: true,
+      include: {
+        activityType: true,
 
-          endLat: true,
-          endLng: true,
-
-          startLabel: true,
-          endLabel: true,
-
-          points: true,
-
-          distanceKm: true,
-          elevationGainM: true,
-          estimatedMins: true,
-        },
-      },
-
-      reviews: {
-        select: {
-          rating: true,
-        },
-      },
-
-      departures: {
-        where: {
-          startsAt: {
-            gte: new Date(),
+        guide: {
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+            guideCertified: true,
           },
         },
 
-        orderBy: {
-          startsAt: "asc",
+        /*
+         * Fotografije ture.
+         *
+         * Prva fotografija po position
+         * može se koristiti kao naslovna.
+         */
+        images: {
+          orderBy: {
+            position: "asc",
+          },
         },
 
-        take: 1,
-      },
-    },
+        /*
+         * Podaci rute potrebni za
+         * prikaz ture na mapi.
+         */
+        route: {
+          select: {
+            startLat: true,
+            startLng: true,
 
-    orderBy: {
-      createdAt: "desc",
-    },
-  });
+            endLat: true,
+            endLng: true,
+
+            startLabel: true,
+            endLabel: true,
+
+            points: true,
+
+            distanceKm: true,
+            elevationGainM: true,
+            estimatedMins: true,
+          },
+        },
+
+        reviews: {
+          select: {
+            rating: true,
+          },
+        },
+
+        /*
+         * Vraćamo samo prvi
+         * naredni termin ture.
+         */
+        departures: {
+          where: {
+            startsAt: {
+              gte: new Date(),
+            },
+          },
+
+          orderBy: {
+            startsAt: "asc",
+          },
+
+          take: 1,
+        },
+      },
+
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
 
   return NextResponse.json({
     tours: tours.map((t) => ({
       ...t,
 
-      avgRating: t.reviews.length
-        ? t.reviews.reduce(
-            (sum, review) =>
-              sum + review.rating,
-            0
-          ) / t.reviews.length
-        : null,
+      avgRating:
+        t.reviews.length
+          ? t.reviews.reduce(
+              (sum, review) =>
+                sum + review.rating,
+              0
+            ) / t.reviews.length
+          : null,
 
-      reviewCount: t.reviews.length,
+      reviewCount:
+        t.reviews.length,
     })),
   });
 }
 
-export async function POST(req: NextRequest) {
+/*
+ * POST /api/tours
+ *
+ * Kreiranje nove ture.
+ */
+export async function POST(
+  req: NextRequest
+) {
   const { error, session } =
     await guard("GUIDE");
 
@@ -207,15 +264,19 @@ export async function POST(req: NextRequest) {
    * 1. Provjera podataka koje je
    * poslao frontend.
    */
-  const body = tourSchema.safeParse(
-    await req.json().catch(() => ({}))
-  );
+  const body =
+    tourSchema.safeParse(
+      await req
+        .json()
+        .catch(() => ({}))
+    );
 
   if (!body.success) {
     return NextResponse.json(
       {
         error:
-          body.error.issues[0]?.message ||
+          body.error.issues[0]
+            ?.message ||
           "Podaci nijesu ispravni.",
       },
       {
@@ -287,7 +348,9 @@ export async function POST(req: NextRequest) {
       departureDates[i];
 
     const startsAt =
-      new Date(departure.startsAt);
+      new Date(
+        departure.startsAt
+      );
 
     const bookingDeadline =
       new Date(
@@ -435,6 +498,17 @@ export async function POST(req: NextRequest) {
           route: true,
           activityType: true,
           departures: true,
+
+          /*
+           * Ako postoje fotografije
+           * vezane za turu, vraćamo
+           * ih u odgovoru.
+           */
+          images: {
+            orderBy: {
+              position: "asc",
+            },
+          },
         },
       });
 
