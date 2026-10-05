@@ -135,6 +135,21 @@ model Tour {
   @@map("tours")
 }
 
+model TourImage {
+  id        String   @id @default(cuid())
+  tourId    String
+  tour      Tour     @relation(fields: [tourId], references: [id], onDelete: Cascade)
+
+  url       String
+  position  Int      @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([tourId])
+  @@index([tourId, position])
+  @@map("tour_images")
+}
+
 model TourDeparture {
   id          String   @id @default(cuid())
   tourId      String
