@@ -1,4 +1,3 @@
-
 import {
   handleUpload,
   type HandleUploadBody,
@@ -7,15 +6,12 @@ import {
 import { NextResponse } from "next/server";
 import { guard } from "@/lib/guard";
 
-export async function POST(
-  request: Request
-) {
+export async function POST(request: Request) {
   try {
     /*
-     * Samo prijavljeni GUIDE/ADMIN
-     * smije dobiti dozvolu za upload.
+     * Korisnik mora biti prijavljen.
      */
-    const { error } = await guard("GUIDE");
+    const { error } = await guard();
 
     if (error) {
       return error;
@@ -24,63 +20,51 @@ export async function POST(
     const body =
       (await request.json()) as HandleUploadBody;
 
-    const response =
+    const jsonResponse =
       await handleUpload({
-        request,
         body,
+        request,
 
-        onBeforeGenerateToken:
-          async (
+        onBeforeGenerateToken: async (
+          pathname
+        ) => {
+          console.log(
+            "Generating Blob upload token:",
             pathname
-          ) => {
-            /*
-             * Dozvoljavamo samo fotografije.
-             */
-            return {
-              allowedContentTypes: [
-                "image/jpeg",
-                "image/png",
-                "image/webp",
-                "image/heic",
-                "image/heif",
-              ],
+          );
 
-              /*
-               * Maksimalno 10 MB po fotografiji.
-               */
-              maximumSizeInBytes:
-                10 * 1024 * 1024,
+          return {
+            allowedContentTypes: [
+              "image/jpeg",
+              "image/png",
+              "image/webp",
+              "image/heic",
+              "image/heif",
+            ],
 
-              addRandomSuffix: true,
-            };
-          },
+            maximumSizeInBytes:
+              10 * 1024 * 1024,
 
-        onUploadCompleted:
-          async ({
-            blob,
-          }) => {
-            console.log(
-              "Tour image uploaded:",
-              blob.url
-            );
+            addRandomSuffix: true,
+          };
+        },
 
-            /*
-             * Ovdje još NE upisujemo
-             * TourImage u bazu.
-             *
-             * Fotografije ćemo vezati
-             * za turu kada sama tura
-             * bude uspješno kreirana.
-             */
-          },
+        onUploadCompleted: async ({
+          blob,
+        }) => {
+          console.log(
+            "Tour image uploaded:",
+            blob.url
+          );
+        },
       });
 
     return NextResponse.json(
-      response
+      jsonResponse
     );
   } catch (error) {
     console.error(
-      "Tour image upload error:",
+      "BLOB UPLOAD ERROR:",
       error
     );
 
