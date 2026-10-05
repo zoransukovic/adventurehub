@@ -1,16 +1,35 @@
-import { NextRequest, NextResponse } from "next/server";
+import {
+  NextRequest,
+  NextResponse,
+} from "next/server";
+
 import { prisma } from "@/lib/prisma";
 import { guard } from "@/lib/guard";
 import { z } from "zod";
 
-const routeSchema = z.object({
-  creationMode: z.enum(["auto", "manual"]),
+/*
+ * =========================================================
+ * VALIDACIJA RUTE
+ * =========================================================
+ */
 
-  startLabel: z.string().optional(),
-  endLabel: z.string().optional(),
+const routeSchema = z.object({
+  creationMode: z.enum([
+    "auto",
+    "manual",
+  ]),
+
+  startLabel: z
+    .string()
+    .optional(),
+
+  endLabel: z
+    .string()
+    .optional(),
 
   startLat: z.number(),
   startLng: z.number(),
+
   endLat: z.number(),
   endLng: z.number(),
 
@@ -18,23 +37,45 @@ const routeSchema = z.object({
     z.object({
       lat: z.number(),
       lng: z.number(),
-      elevation: z.number().optional(),
+      elevation: z
+        .number()
+        .optional(),
     })
   ),
 
-  distanceKm: z.number().optional(),
-  elevationGainM: z.number().optional(),
-  estimatedMins: z.number().optional(),
+  distanceKm: z
+    .number()
+    .optional(),
+
+  elevationGainM: z
+    .number()
+    .optional(),
+
+  estimatedMins: z
+    .number()
+    .optional(),
 });
+
+/*
+ * =========================================================
+ * VALIDACIJA TERMINA
+ * =========================================================
+ */
 
 const departureSchema = z.object({
   startsAt: z
     .string()
-    .min(1, "Datum polaska je obavezan."),
+    .min(
+      1,
+      "Datum polaska je obavezan."
+    ),
 
   bookingDeadline: z
     .string()
-    .min(1, "Rok za rezervacije je obavezan."),
+    .min(
+      1,
+      "Rok za rezervacije je obavezan."
+    ),
 
   spotsLeft: z
     .number()
@@ -43,6 +84,32 @@ const departureSchema = z.object({
       "Broj slobodnih mjesta mora biti veći od 0."
     ),
 });
+
+/*
+ * =========================================================
+ * VALIDACIJA FOTOGRAFIJA
+ * =========================================================
+ */
+
+const imageSchema = z.object({
+  url: z
+    .string()
+    .min(
+      1,
+      "URL fotografije nije ispravan."
+    ),
+
+  position: z
+    .number()
+    .int()
+    .nonnegative(),
+});
+
+/*
+ * =========================================================
+ * VALIDACIJA TURE
+ * =========================================================
+ */
 
 const tourSchema = z.object({
   title: z
@@ -61,15 +128,22 @@ const tourSchema = z.object({
       "Opis mora imati najmanje 10 karaktera."
     ),
 
-  descriptionEn: z.string().optional(),
+  descriptionEn: z
+    .string()
+    .optional(),
 
   activityTypeId: z
     .string()
-    .min(1, "Izaberite vrstu aktivnosti."),
+    .min(
+      1,
+      "Izaberite vrstu aktivnosti."
+    ),
 
   pricePerPerson: z
     .number()
-    .positive("Cijena mora biti veća od 0."),
+    .positive(
+      "Cijena mora biti veća od 0."
+    ),
 
   maxParticipants: z
     .number()
@@ -87,7 +161,11 @@ const tourSchema = z.object({
     .optional(),
 
   difficulty: z
-    .enum(["EASY", "MODERATE", "HARD"])
+    .enum([
+      "EASY",
+      "MODERATE",
+      "HARD",
+    ])
     .default("MODERATE"),
 
   transportMode: z.enum([
@@ -100,7 +178,9 @@ const tourSchema = z.object({
     "OTHER",
   ]),
 
-  meetingPoint: z.string().optional(),
+  meetingPoint: z
+    .string()
+    .optional(),
 
   includesItems: z
     .array(z.string())
@@ -113,25 +193,46 @@ const tourSchema = z.object({
       "Dodajte najmanje jedan termin polaska."
     ),
 
+  /*
+   * Maksimalno 5 fotografija.
+   *
+   * position 0 predstavlja
+   * naslovnu fotografiju.
+   */
+  images: z
+    .array(imageSchema)
+    .max(
+      5,
+      "Možete dodati najviše 5 fotografija."
+    )
+    .default([]),
+
   route: routeSchema,
 });
 
 /*
+ * =========================================================
  * GET /api/tours
+ * =========================================================
  *
- * Vraća aktivne ture.
+ * Vraća sve aktivne ture.
  *
  * Učitavamo:
- * - tip aktivnosti
+ * - vrstu aktivnosti
  * - vodiča
  * - fotografije
  * - rutu
  * - ocjene
  * - prvi naredni termin
  */
-export async function GET(req: NextRequest) {
+
+export async function GET(
+  req: NextRequest
+) {
   const sp =
-    new URL(req.url).searchParams;
+    new URL(
+      req.url
+    ).searchParams;
 
   const tours =
     await prisma.tour.findMany({
@@ -139,21 +240,30 @@ export async function GET(req: NextRequest) {
         active: true,
 
         activityTypeId:
-          sp.get("activityTypeId") ||
-          undefined,
+          sp.get(
+            "activityTypeId"
+          ) || undefined,
 
         title: sp.get("search")
           ? {
               contains:
-                sp.get("search")!,
+                sp.get(
+                  "search"
+                )!,
               mode: "insensitive",
             }
           : undefined,
       },
 
       include: {
+        /*
+         * Vrsta aktivnosti.
+         */
         activityType: true,
 
+        /*
+         * Podaci vodiča.
+         */
         guide: {
           select: {
             id: true,
@@ -166,8 +276,9 @@ export async function GET(req: NextRequest) {
         /*
          * Fotografije ture.
          *
-         * Prva fotografija po position
-         * može se koristiti kao naslovna.
+         * Prva fotografija
+         * (position = 0)
+         * predstavlja naslovnu.
          */
         images: {
           orderBy: {
@@ -176,8 +287,7 @@ export async function GET(req: NextRequest) {
         },
 
         /*
-         * Podaci rute potrebni za
-         * prikaz ture na mapi.
+         * Ruta ture.
          */
         route: {
           select: {
@@ -198,6 +308,9 @@ export async function GET(req: NextRequest) {
           },
         },
 
+        /*
+         * Ocjene ture.
+         */
         reviews: {
           select: {
             rating: true,
@@ -228,42 +341,69 @@ export async function GET(req: NextRequest) {
       },
     });
 
+  /*
+   * Dodajemo prosječnu ocjenu
+   * i broj recenzija.
+   */
   return NextResponse.json({
-    tours: tours.map((t) => ({
-      ...t,
+    tours: tours.map(
+      (tour) => ({
+        ...tour,
 
-      avgRating:
-        t.reviews.length
-          ? t.reviews.reduce(
-              (sum, review) =>
-                sum + review.rating,
-              0
-            ) / t.reviews.length
-          : null,
+        avgRating:
+          tour.reviews.length >
+          0
+            ? tour.reviews.reduce(
+                (
+                  sum,
+                  review
+                ) =>
+                  sum +
+                  review.rating,
+                0
+              ) /
+              tour.reviews
+                .length
+            : null,
 
-      reviewCount:
-        t.reviews.length,
-    })),
+        reviewCount:
+          tour.reviews.length,
+      })
+    ),
   });
 }
 
 /*
+ * =========================================================
  * POST /api/tours
+ * =========================================================
  *
  * Kreiranje nove ture.
  */
+
 export async function POST(
   req: NextRequest
 ) {
-  const { error, session } =
-    await guard("GUIDE");
+  /*
+   * Samo GUIDE ili korisnik
+   * koji prolazi GUIDE guard
+   * može kreirati turu.
+   */
+  const {
+    error,
+    session,
+  } = await guard("GUIDE");
 
-  if (error) return error;
+  if (error) {
+    return error;
+  }
 
   /*
-   * 1. Provjera podataka koje je
-   * poslao frontend.
+   * =======================================================
+   * 1. VALIDACIJA PODATAKA
+   * =======================================================
    */
+
   const body =
     tourSchema.safeParse(
       await req
@@ -275,7 +415,8 @@ export async function POST(
     return NextResponse.json(
       {
         error:
-          body.error.issues[0]
+          body.error
+            .issues[0]
             ?.message ||
           "Podaci nijesu ispravni.",
       },
@@ -285,28 +426,40 @@ export async function POST(
     );
   }
 
+  /*
+   * Fotografije izdvajamo posebno
+   * jer predstavljaju Prisma relaciju,
+   * a ne direktna polja Tour modela.
+   */
   const {
     route,
     departureDates,
+    images,
     ...tourData
   } = body.data;
 
   /*
-   * 2. Provjera da izabrana vrsta
-   * aktivnosti stvarno postoji.
+   * =======================================================
+   * 2. PROVJERA AKTIVNOSTI
+   * =======================================================
    */
-  const activity =
-    await prisma.activityType.findUnique({
-      where: {
-        id: tourData.activityTypeId,
-      },
 
-      select: {
-        id: true,
-        name: true,
-        active: true,
-      },
-    });
+  const activity =
+    await prisma
+      .activityType
+      .findUnique({
+        where: {
+          id:
+            tourData
+              .activityTypeId,
+        },
+
+        select: {
+          id: true,
+          name: true,
+          active: true,
+        },
+      });
 
   if (!activity) {
     return NextResponse.json(
@@ -321,8 +474,8 @@ export async function POST(
   }
 
   /*
-   * Ako je aktivnost deaktivirana,
-   * ne dozvoljavamo kreiranje nove ture.
+   * Ne dozvoljavamo kreiranje
+   * ture za deaktiviranu aktivnost.
    */
   if (!activity.active) {
     return NextResponse.json(
@@ -337,11 +490,15 @@ export async function POST(
   }
 
   /*
-   * 3. Serverska provjera svih termina.
+   * =======================================================
+   * 3. PROVJERA TERMINA
+   * =======================================================
    */
+
   for (
     let i = 0;
-    i < departureDates.length;
+    i <
+    departureDates.length;
     i++
   ) {
     const departure =
@@ -354,15 +511,20 @@ export async function POST(
 
     const bookingDeadline =
       new Date(
-        departure.bookingDeadline
+        departure
+          .bookingDeadline
       );
 
+    /*
+     * Provjera formata datuma.
+     */
     if (
       Number.isNaN(
         startsAt.getTime()
       ) ||
       Number.isNaN(
-        bookingDeadline.getTime()
+        bookingDeadline
+          .getTime()
       )
     ) {
       return NextResponse.json(
@@ -377,8 +539,8 @@ export async function POST(
     }
 
     /*
-     * Ne dozvoljavamo termin
-     * u prošlosti.
+     * Polazak mora biti
+     * u budućnosti.
      */
     if (
       startsAt.getTime() <=
@@ -396,10 +558,12 @@ export async function POST(
     }
 
     /*
-     * Rok mora biti prije polaska.
+     * Rok rezervacije mora biti
+     * prije vremena polaska.
      */
     if (
-      bookingDeadline.getTime() >=
+      bookingDeadline
+        .getTime() >=
       startsAt.getTime()
     ) {
       return NextResponse.json(
@@ -414,11 +578,12 @@ export async function POST(
     }
 
     /*
-     * Rok za rezervacije mora
-     * biti u budućnosti.
+     * Rok rezervacije takođe
+     * mora biti u budućnosti.
      */
     if (
-      bookingDeadline.getTime() <=
+      bookingDeadline
+        .getTime() <=
       Date.now()
     ) {
       return NextResponse.json(
@@ -433,12 +598,14 @@ export async function POST(
     }
 
     /*
-     * Broj mjesta ne može biti veći
-     * od maksimalnog kapaciteta ture.
+     * Slobodnih mjesta ne može
+     * biti više od maksimalnog
+     * kapaciteta ture.
      */
     if (
       departure.spotsLeft >
-      tourData.maxParticipants
+      tourData
+        .maxParticipants
     ) {
       return NextResponse.json(
         {
@@ -453,64 +620,115 @@ export async function POST(
   }
 
   /*
-   * 4. Kreiranje ture.
+   * =======================================================
+   * 4. KREIRANJE TURE
+   * =======================================================
    */
+
   try {
     const tour =
-      await prisma.tour.create({
-        data: {
-          ...tourData,
+      await prisma
+        .tour
+        .create({
+          data: {
+            ...tourData,
 
-          guideId:
-            session!.userId,
+            /*
+             * Trenutni vodič.
+             */
+            guideId:
+              session!.userId,
 
-          route: {
-            create: {
-              ...route,
+            /*
+             * Ruta.
+             */
+            route: {
+              create: {
+                ...route,
 
-              points:
-                route.points as never,
+                points:
+                  route.points as never,
+              },
+            },
+
+            /*
+             * Termini polaska.
+             */
+            departures: {
+              create:
+                departureDates.map(
+                  (
+                    departure
+                  ) => ({
+                    startsAt:
+                      new Date(
+                        departure
+                          .startsAt
+                      ),
+
+                    bookingDeadline:
+                      new Date(
+                        departure
+                          .bookingDeadline
+                      ),
+
+                    spotsLeft:
+                      departure
+                        .spotsLeft,
+                  })
+                ),
+            },
+
+            /*
+             * FOTOGRAFIJE
+             *
+             * Ovo je dio koji je
+             * ranije nedostajao.
+             *
+             * URL fotografije je već
+             * dobijen iz
+             * /api/tour-images/upload.
+             *
+             * Sada ga povezujemo
+             * sa novom turom.
+             */
+            images: {
+              create:
+                images.map(
+                  (
+                    image
+                  ) => ({
+                    url:
+                      image.url,
+
+                    position:
+                      image.position,
+                  })
+                ),
             },
           },
-
-          departures: {
-            create:
-              departureDates.map(
-                (departure) => ({
-                  startsAt:
-                    new Date(
-                      departure.startsAt
-                    ),
-
-                  bookingDeadline:
-                    new Date(
-                      departure.bookingDeadline
-                    ),
-
-                  spotsLeft:
-                    departure.spotsLeft,
-                })
-              ),
-          },
-        },
-
-        include: {
-          route: true,
-          activityType: true,
-          departures: true,
 
           /*
-           * Ako postoje fotografije
-           * vezane za turu, vraćamo
-           * ih u odgovoru.
+           * Odmah nakon kreiranja
+           * vraćamo i povezane podatke.
            */
-          images: {
-            orderBy: {
-              position: "asc",
+          include: {
+            route: true,
+
+            activityType:
+              true,
+
+            departures:
+              true,
+
+            images: {
+              orderBy: {
+                position:
+                  "asc",
+              },
             },
           },
-        },
-      });
+        });
 
     return NextResponse.json(
       {
