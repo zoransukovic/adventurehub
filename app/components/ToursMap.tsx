@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect } from "react";
@@ -73,10 +72,24 @@ function FitTours({
   const map = useMap();
 
   useEffect(() => {
-    if (tours.length === 0) return;
+    const toursWithRoute = tours.filter(
+      (tour) =>
+        tour.route &&
+        Number.isFinite(tour.route.startLat) &&
+        Number.isFinite(tour.route.startLng)
+    );
 
-    if (tours.length === 1) {
-      const route = tours[0].route;
+    if (toursWithRoute.length === 0) {
+      return;
+    }
+
+    /*
+     * Ako postoji samo jedna tura,
+     * centriramo mapu na početak njene rute.
+     */
+    if (toursWithRoute.length === 1) {
+      const route =
+        toursWithRoute[0].route;
 
       if (!route) return;
 
@@ -91,15 +104,15 @@ function FitTours({
       return;
     }
 
+    /*
+     * Ako postoji više tura,
+     * mapa obuhvata njihove početne tačke.
+     */
     const bounds = L.latLngBounds(
-      tours
-        .filter(
-          (tour) => tour.route
-        )
-        .map((tour) => [
-          tour.route!.startLat,
-          tour.route!.startLng,
-        ])
+      toursWithRoute.map((tour) => [
+        tour.route!.startLat,
+        tour.route!.startLng,
+      ])
     );
 
     if (bounds.isValid()) {
@@ -117,38 +130,17 @@ export default function ToursMap({
   selectedTourId,
   onSelectTour,
 }: Props) {
-  const selectedTour =
-    tours.find(
-      (tour) =>
-        tour.id === selectedTourId
-    ) ?? null;
-
   /*
    * Početni centar je Crna Gora.
    *
-   * FitTours će zatim automatski
-   * podesiti prikaz prema turama.
+   * FitTours će nakon učitavanja
+   * automatski podesiti prikaz prema turama.
    */
   const defaultCenter:
     [number, number] = [
       42.7,
       19.25,
     ];
-
-  const routePoints =
-    selectedTour?.route?.points
-      ?.filter(
-        (point) =>
-          Number.isFinite(point.lat) &&
-          Number.isFinite(point.lng)
-      )
-      .map(
-        (point) =>
-          [
-            point.lat,
-            point.lng,
-          ] as [number, number]
-      ) ?? [];
 
   return (
     <MapContainer
@@ -168,8 +160,84 @@ export default function ToursMap({
 
       <FitTours tours={tours} />
 
+      {/*
+       * Crtamo rutu ZA SVAKU turu
+       * koja ima najmanje dvije validne tačke.
+       *
+       * Izabrana tura ima deblju liniju.
+       */}
       {tours.map((tour) => {
-        if (!tour.route) return null;
+        if (!tour.route?.points) {
+          return null;
+        }
+
+        const points =
+          tour.route.points
+            .filter(
+              (point) =>
+                Number.isFinite(
+                  point.lat
+                ) &&
+                Number.isFinite(
+                  point.lng
+                )
+            )
+            .map(
+              (point) =>
+                [
+                  point.lat,
+                  point.lng,
+                ] as [
+                  number,
+                  number
+                ]
+            );
+
+        if (points.length < 2) {
+          return null;
+        }
+
+        const isSelected =
+          tour.id === selectedTourId;
+
+        return (
+          <Polyline
+            key={`route-${tour.id}`}
+            positions={points}
+            pathOptions={{
+              weight: isSelected
+                ? 7
+                : 4,
+              opacity: isSelected
+                ? 1
+                : 0.65,
+            }}
+            eventHandlers={{
+              click: () =>
+                onSelectTour(tour),
+            }}
+          />
+        );
+      })}
+
+      {/*
+       * Marker početne tačke svake ture.
+       */}
+      {tours.map((tour) => {
+        if (!tour.route) {
+          return null;
+        }
+
+        if (
+          !Number.isFinite(
+            tour.route.startLat
+          ) ||
+          !Number.isFinite(
+            tour.route.startLng
+          )
+        ) {
+          return null;
+        }
 
         return (
           <Marker
@@ -206,23 +274,15 @@ export default function ToursMap({
                 <br />
 
                 <span>
-                  €{tour.pricePerPerson} po
-                  osobi
+                  €
+                  {tour.pricePerPerson}{" "}
+                  po osobi
                 </span>
               </div>
             </Popup>
           </Marker>
         );
       })}
-
-      {routePoints.length >= 2 && (
-        <Polyline
-          positions={routePoints}
-          pathOptions={{
-            weight: 5,
-          }}
-        />
-      )}
     </MapContainer>
   );
 }
