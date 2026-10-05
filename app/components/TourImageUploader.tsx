@@ -1,7 +1,5 @@
-
 "use client";
 
-import { upload } from "@vercel/blob/client";
 import { useRef, useState } from "react";
 
 export type TourImageData = {
@@ -15,118 +13,170 @@ type Props = {
 };
 
 const MAX_IMAGES = 5;
-const MAX_SIZE = 10 * 1024 * 1024;
+
+/*
+ * Server upload preko Vercel funkcije ima
+ * ograničenje veličine requesta, zato
+ * koristimo maksimalno 4 MB po fotografiji.
+ */
+const MAX_SIZE = 4 * 1024 * 1024;
 
 export default function TourImageUploader({
   images,
   onChange,
 }: Props) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef =
+    useRef<HTMLInputElement>(null);
 
-  const [uploading, setUploading] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [error, setError] = useState("");
+  const [uploading, setUploading] =
+    useState(false);
+
+  const [currentFile, setCurrentFile] =
+    useState(0);
+
+  const [totalFiles, setTotalFiles] =
+    useState(0);
+
+  const [error, setError] =
+    useState("");
 
   async function selectFiles(
     event: React.ChangeEvent<HTMLInputElement>
   ) {
-    const files = Array.from(event.target.files ?? []);
+    const files = Array.from(
+      event.target.files ?? []
+    );
 
-    // Omogućava ponovni izbor istog fajla.
+    /*
+     * Omogućava da kasnije ponovo
+     * izaberemo isti fajl.
+     */
     event.target.value = "";
 
-    if (!files.length) return;
+    if (!files.length) {
+      return;
+    }
 
     setError("");
 
-    const remaining = MAX_IMAGES - images.length;
+    const remaining =
+      MAX_IMAGES - images.length;
 
     if (remaining <= 0) {
-      setError("Možete dodati najviše 5 fotografija.");
+      setError(
+        "Možete dodati najviše 5 fotografija."
+      );
       return;
     }
 
     if (files.length > remaining) {
       setError(
         `Možete dodati još najviše ${remaining} ${
-          remaining === 1 ? "fotografiju" : "fotografije"
+          remaining === 1
+            ? "fotografiju"
+            : "fotografije"
         }.`
       );
+
       return;
     }
 
     /*
-     * Provjera fajlova prije uploada.
+     * Provjera svih fotografija
+     * prije nego što počnemo upload.
      */
     for (const file of files) {
-      if (!file.type.startsWith("image/")) {
+      if (
+        !file.type.startsWith("image/")
+      ) {
         setError(
-          "Dozvoljeni su samo fajlovi sa fotografijama."
+          `"${file.name}" nije fotografija.`
         );
+
         return;
       }
 
       if (file.size > MAX_SIZE) {
         setError(
-          `Fotografija "${file.name}" je veća od 10 MB.`
+          `Fotografija "${file.name}" je veća od 4 MB.`
         );
+
         return;
       }
     }
 
     try {
       setUploading(true);
-      setProgress(0);
+      setTotalFiles(files.length);
+      setCurrentFile(0);
 
-      const uploaded: TourImageData[] = [];
+      const uploaded: TourImageData[] =
+        [];
 
       /*
        * Fotografije šaljemo jednu po jednu.
        */
-      for (let i = 0; i < files.length; i++) {
+      for (
+        let i = 0;
+        i < files.length;
+        i++
+      ) {
         const file = files[i];
 
-        const blob = await upload(
-          `tours/${Date.now()}-${file.name}`,
-          file,
-          {
-            access: "public",
+        setCurrentFile(i + 1);
 
-            handleUploadUrl:
-              "/api/tour-images/upload",
+        const formData =
+          new FormData();
 
-            onUploadProgress(event) {
-              const fileProgress =
-                event.percentage / files.length;
-
-              const completedProgress =
-                (i * 100) / files.length;
-
-              setProgress(
-                Math.round(
-                  completedProgress +
-                    fileProgress
-                )
-              );
-            },
-          }
+        formData.append(
+          "file",
+          file
         );
 
+        const response =
+          await fetch(
+            "/api/tour-images/upload",
+            {
+              method: "POST",
+              body: formData,
+            }
+          );
+
+        const data =
+          await response
+            .json()
+            .catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(
+            data.error ||
+              `Upload fotografije "${file.name}" nije uspio.`
+          );
+        }
+
+        if (!data.url) {
+          throw new Error(
+            "Server nije vratio URL fotografije."
+          );
+        }
+
         uploaded.push({
-          url: blob.url,
-          position: images.length + i,
+          url: data.url,
+          position:
+            images.length +
+            uploaded.length,
         });
       }
 
       /*
-       * Dodajemo nove slike postojećim.
+       * Tek kada su fotografije
+       * uspješno uploadovane dodajemo
+       * ih u formu ture.
        */
       onChange([
         ...images,
         ...uploaded,
       ]);
-
-      setProgress(100);
     } catch (err) {
       console.error(
         "Greška pri uploadu fotografije:",
@@ -140,22 +190,33 @@ export default function TourImageUploader({
       );
     } finally {
       setUploading(false);
+      setCurrentFile(0);
+      setTotalFiles(0);
     }
   }
 
   /*
-   * Brisanje fotografije iz liste.
+   * Uklanjanje fotografije iz forme.
    *
-   * Nakon brisanja ponovo postavljamo
-   * position: 0, 1, 2...
+   * position se nakon toga ponovo
+   * postavlja na 0, 1, 2...
    */
-  function removeImage(index: number) {
+  function removeImage(
+    index: number
+  ) {
+    if (uploading) return;
+
     const next = images
-      .filter((_, i) => i !== index)
-      .map((image, i) => ({
-        ...image,
-        position: i,
-      }));
+      .filter(
+        (_, i) =>
+          i !== index
+      )
+      .map(
+        (image, i) => ({
+          ...image,
+          position: i,
+        })
+      );
 
     onChange(next);
   }
@@ -164,24 +225,36 @@ export default function TourImageUploader({
    * Izabranu fotografiju stavljamo
    * na prvo mjesto.
    *
-   * position 0 = naslovna.
+   * position 0 = naslovna fotografija.
    */
-  function makeCover(index: number) {
-    if (index === 0) return;
+  function makeCover(
+    index: number
+  ) {
+    if (
+      uploading ||
+      index === 0
+    ) {
+      return;
+    }
 
-    const selected = images[index];
+    const selected =
+      images[index];
 
-    const rest = images.filter(
-      (_, i) => i !== index
-    );
+    const rest =
+      images.filter(
+        (_, i) =>
+          i !== index
+      );
 
     const next = [
       selected,
       ...rest,
-    ].map((image, i) => ({
-      ...image,
-      position: i,
-    }));
+    ].map(
+      (image, i) => ({
+        ...image,
+        position: i,
+      })
+    );
 
     onChange(next);
   }
@@ -194,59 +267,78 @@ export default function TourImageUploader({
         </h3>
 
         <p className="mt-1 text-sm text-foreground/55">
-          Dodajte do 5 fotografija. Prva fotografija
-          je naslovna.
+          Dodajte do 5 fotografija.
+          Prva fotografija je naslovna.
         </p>
       </div>
 
-      {/* Pregled dodatih fotografija */}
+      {/* Pregled fotografija */}
       {images.length > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {images.map((image, index) => (
-            <div
-              key={image.url}
-              className="relative overflow-hidden rounded-xl border border-black/10 bg-black/5"
-            >
-              <img
-                src={image.url}
-                alt={`Fotografija ture ${index + 1}`}
-                className="aspect-[4/3] w-full object-cover"
-              />
-
-              {/* Naslovna oznaka */}
-              {index === 0 && (
-                <div className="absolute left-2 top-2 rounded-full bg-brand px-2 py-1 text-xs font-medium text-white shadow">
-                  Naslovna
-                </div>
-              )}
-
-              {/* Brisanje */}
-              <button
-                type="button"
-                onClick={() => removeImage(index)}
-                className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/65 text-base text-white shadow"
-                aria-label="Obriši fotografiju"
+          {images.map(
+            (image, index) => (
+              <div
+                key={image.url}
+                className="relative overflow-hidden rounded-xl border border-black/10 bg-black/5"
               >
-                ✕
-              </button>
+                <img
+                  src={image.url}
+                  alt={`Fotografija ture ${
+                    index + 1
+                  }`}
+                  className="aspect-[4/3] w-full object-cover"
+                />
 
-              {/* Postavi kao naslovnu */}
-              {index !== 0 && (
+                {/* Naslovna */}
+                {index === 0 && (
+                  <div className="absolute left-2 top-2 rounded-full bg-brand px-2 py-1 text-xs font-medium text-white shadow">
+                    Naslovna
+                  </div>
+                )}
+
+                {/* Brisanje */}
                 <button
                   type="button"
-                  onClick={() => makeCover(index)}
-                  className="absolute bottom-2 left-2 right-2 rounded-lg bg-black/65 px-2 py-2 text-xs font-medium text-white"
+                  disabled={
+                    uploading
+                  }
+                  onClick={() =>
+                    removeImage(
+                      index
+                    )
+                  }
+                  className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/65 text-base text-white shadow disabled:opacity-40"
+                  aria-label="Obriši fotografiju"
                 >
-                  Postavi kao naslovnu
+                  ✕
                 </button>
-              )}
-            </div>
-          ))}
+
+                {/* Postavi kao naslovnu */}
+                {index !== 0 && (
+                  <button
+                    type="button"
+                    disabled={
+                      uploading
+                    }
+                    onClick={() =>
+                      makeCover(
+                        index
+                      )
+                    }
+                    className="absolute bottom-2 left-2 right-2 rounded-lg bg-black/65 px-2 py-2 text-xs font-medium text-white disabled:opacity-40"
+                  >
+                    Postavi kao naslovnu
+                  </button>
+                )}
+              </div>
+            )
+          )}
         </div>
       )}
 
       {/* Izbor fotografija */}
-      {images.length < MAX_IMAGES && (
+      {images.length <
+        MAX_IMAGES && (
         <>
           <input
             ref={inputRef}
@@ -254,39 +346,72 @@ export default function TourImageUploader({
             accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
             multiple
             className="hidden"
-            onChange={selectFiles}
+            disabled={
+              uploading
+            }
+            onChange={
+              selectFiles
+            }
           />
 
           <button
             type="button"
-            disabled={uploading}
+            disabled={
+              uploading
+            }
             onClick={() =>
               inputRef.current?.click()
             }
             className="w-full rounded-xl border-2 border-dashed border-brand/35 bg-brand-light px-4 py-5 text-center text-sm font-medium text-brand-dark disabled:opacity-50"
           >
             {uploading
-              ? `Šaljem fotografije... ${progress}%`
+              ? `Šaljem fotografiju ${currentFile}/${totalFiles}...`
               : "📷 + Dodaj fotografije"}
           </button>
         </>
       )}
 
-      {/* Progress bar */}
+      {/* Upload indikator */}
       {uploading && (
-        <div className="h-2 overflow-hidden rounded-full bg-black/10">
-          <div
-            className="h-full bg-brand transition-all"
-            style={{
-              width: `${progress}%`,
-            }}
-          />
+        <div className="rounded-xl bg-brand-light p-3">
+          <div className="mb-2 flex justify-between text-xs text-brand-dark">
+            <span>
+              Upload fotografija
+            </span>
+
+            <span>
+              {currentFile}/
+              {totalFiles}
+            </span>
+          </div>
+
+          <div className="h-2 overflow-hidden rounded-full bg-black/10">
+            <div
+              className="h-full bg-brand transition-all"
+              style={{
+                width:
+                  totalFiles >
+                  0
+                    ? `${
+                        (currentFile /
+                          totalFiles) *
+                        100
+                      }%`
+                    : "0%",
+              }}
+            />
+          </div>
         </div>
       )}
 
       <div className="flex justify-between text-xs text-foreground/45">
-        <span>JPG, PNG, WebP, HEIC</span>
-        <span>{images.length}/5</span>
+        <span>
+          JPG, PNG, WebP, HEIC · max 4 MB
+        </span>
+
+        <span>
+          {images.length}/5
+        </span>
       </div>
 
       {/* Greška */}
