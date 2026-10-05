@@ -5,18 +5,11 @@ export type ActivityType = {
   icon: string;
 };
 
-export type RoutePoint = {
-  lat: number;
-  lng: number;
-  elevation?: number;
-};
-
 export type TourListItem = {
   id: string;
   title: string;
   pricePerPerson: number;
   maxParticipants: number;
-
   difficulty: string;
   transportMode: string;
 
@@ -29,21 +22,15 @@ export type TourListItem = {
   };
 
   route: {
-    startLat: number;
-    startLng: number;
-
-    endLat: number;
-    endLng: number;
-
-    startLabel: string | null;
-    endLabel: string | null;
-
-    points: RoutePoint[];
-
     distanceKm: number | null;
-    elevationGainM: number | null;
     estimatedMins: number | null;
   } | null;
+
+  images: {
+    id: string;
+    url: string;
+    position: number;
+  }[];
 
   avgRating: number | null;
   reviewCount: number;
