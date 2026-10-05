@@ -1,68 +1,83 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
-import StarRating from "@/app/components/StarRating";
-import Navbar from "@/app/components/Navbar";
-import dynamic from "next/dynamic";
+import {
+  useEffect,
+  useState,
+} from "react";
 
-const TourRouteMap = dynamic(
-  () => import("@/app/components/TourRouteMap"),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex h-[380px] items-center justify-center rounded-xl bg-brand-light text-sm text-foreground/50">
-        Učitavanje mape...
-      </div>
-    ),
-  }
-);
+import {
+  useParams,
+  useRouter,
+} from "next/navigation";
+
+type TourImage = {
+  id: string;
+  url: string;
+  position: number;
+};
 
 type Tour = {
   id: string;
   title: string;
   descriptionSr: string;
   descriptionEn: string | null;
+
   pricePerPerson: number;
   maxParticipants: number;
+
   durationMinutes: number | null;
+
   difficulty: string;
   transportMode: string;
+
   meetingPoint: string | null;
+
   includesItems: string[];
 
+  active: boolean;
+
+  images: TourImage[];
+
   activityType: {
+    id: string;
     name: string;
+    nameEn?: string | null;
+    icon?: string;
   };
 
   guide: {
     id: string;
     fullName: string;
+    avatarUrl: string | null;
     guideCertified: boolean;
     guideBio: string | null;
   };
 
   route: {
+    id?: string;
     startLat: number;
     startLng: number;
     endLat: number;
     endLng: number;
+
     startLabel: string | null;
     endLabel: string | null;
+
     points: {
       lat: number;
       lng: number;
       elevation?: number;
     }[];
+
     distanceKm: number | null;
-    estimatedMins: number | null;
     elevationGainM: number | null;
+    estimatedMins: number | null;
   } | null;
 
   departures: {
     id: string;
     startsAt: string;
+    bookingDeadline: string | null;
     spotsLeft: number;
   }[];
 
@@ -70,775 +85,973 @@ type Tour = {
     id: string;
     rating: number;
     comment: string | null;
-    tags: string[];
-    author: {
-      fullName: string;
-    };
     createdAt: string;
+
+    author?: {
+      id: string;
+      fullName: string;
+      avatarUrl: string | null;
+    };
   }[];
 
   avgRating: number | null;
   reviewCount: number;
 };
 
-type User = {
-  id: string;
-  role: string;
-} | null;
-
-type ParticipantInfo = {
-  fullName: string;
-  age: string;
+const DIFFICULTY: Record<
+  string,
+  string
+> = {
+  EASY: "Lako",
+  MODERATE: "Umjereno",
+  HARD: "Teško",
 };
 
-const DIFF = {
-  EASY: "🟢 Lako",
-  MODERATE: "🟡 Umjereno",
-  HARD: "🔴 Teško",
-} as Record<string, string>;
+const TRANSPORT: Record<
+  string,
+  string
+> = {
+  FOOT: "Pješke",
+  BIKE: "Bicikl",
+  CAR: "Automobil",
+  ATV: "ATV",
+  KAYAK: "Kajak",
+  DIVING: "Ronjenje",
+  OTHER: "Ostalo",
+};
 
-const TRANSPORT = {
-  FOOT: "🥾 Pješak",
-  BIKE: "🚵 Bicikl",
-  CAR: "🚗 Automobil",
-  ATV: "🏍️ Quad/ATV",
-  KAYAK: "🛶 Kajak",
-  DIVING: "🤿 Ronjenje",
-  OTHER: "🌿 Ostalo",
-} as Record<string, string>;
+function formatDuration(
+  minutes: number | null
+) {
+  if (!minutes) {
+    return "Nije navedeno";
+  }
+
+  const hours =
+    Math.floor(minutes / 60);
+
+  const mins =
+    minutes % 60;
+
+  if (hours && mins) {
+    return `${hours} h ${mins} min`;
+  }
+
+  if (hours) {
+    return `${hours} h`;
+  }
+
+  return `${mins} min`;
+}
+
+function formatDate(
+  value: string
+) {
+  return new Date(
+    value
+  ).toLocaleString(
+    "sr-ME",
+    {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }
+  );
+}
 
 export default function TourPage() {
-  const { id } = useParams<{ id: string }>();
+  const params = useParams();
   const router = useRouter();
 
-  const [tour, setTour] = useState<Tour | null>(null);
-  const [user, setUser] = useState<User>(null);
+  const id =
+    params.id as string;
 
-  const [selDep, setSelDep] = useState("");
-  const [participants, setParticipants] = useState(1);
+  const [tour, setTour] =
+    useState<Tour | null>(
+      null
+    );
 
-  const [participantsInfo, setParticipantsInfo] = useState<
-    ParticipantInfo[]
-  >([{ fullName: "", age: "" }]);
+  const [loading, setLoading] =
+    useState(true);
 
-  const [booking, setBooking] = useState<{
-    loading: boolean;
-    done: boolean;
-    error: string | null;
-  }>({
-    loading: false,
-    done: false,
-    error: null,
-  });
+  const [error, setError] =
+    useState("");
 
-  const [lang, setLang] = useState<"sr" | "en">("sr");
-  const [showRoute, setShowRoute] = useState(false);
+  /*
+   * Trenutno prikazana
+   * fotografija.
+   */
+  const [
+    currentImage,
+    setCurrentImage,
+  ] = useState(0);
 
+  /*
+   * Prikaz detalja rute.
+   */
+  const [
+    showRoute,
+    setShowRoute,
+  ] = useState(false);
+
+  /*
+   * =======================================================
+   * UČITAVANJE TURE
+   * =======================================================
+   */
   useEffect(() => {
-    Promise.all([
-      fetch(`/api/tours/${id}`).then((r) => r.json()),
-      fetch("/api/auth/me").then((r) => r.json()),
-    ]).then(([t, m]) => {
-      setTour(t.tour);
-      setUser(m.user);
+    if (!id) {
+      return;
+    }
 
-      if (t.tour?.departures?.[0]) {
-        setSelDep(t.tour.departures[0].id);
+    async function loadTour() {
+      try {
+        setLoading(true);
+        setError("");
+
+        const response =
+          await fetch(
+            `/api/tours/${id}`,
+            {
+              cache:
+                "no-store",
+            }
+          );
+
+        const data =
+          await response
+            .json()
+            .catch(
+              () => ({})
+            );
+
+        if (!response.ok) {
+          throw new Error(
+            data.error ||
+              "Tura nije pronađena."
+          );
+        }
+
+        setTour(data.tour);
+
+        /*
+         * Svaki put kada učitamo
+         * novu turu krećemo od
+         * naslovne fotografije.
+         */
+        setCurrentImage(0);
+      } catch (err) {
+        console.error(
+          "Greška pri učitavanju ture:",
+          err
+        );
+
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Došlo je do greške."
+        );
+      } finally {
+        setLoading(false);
       }
-    });
+    }
+
+    loadTour();
   }, [id]);
 
-  function changeParticipantCount(value: number) {
-    if (!tour) return;
-
-    const selectedDeparture = tour.departures.find(
-      (d) => d.id === selDep
-    );
-
-    const available =
-      selectedDeparture?.spotsLeft ?? tour.maxParticipants;
-
-    let count = value;
-
-    if (count < 1) count = 1;
-    if (count > available) count = available;
-
-    setParticipants(count);
-
-    setParticipantsInfo((current) => {
-      const next = [...current];
-
-      while (next.length < count) {
-        next.push({
-          fullName: "",
-          age: "",
-        });
-      }
-
-      return next.slice(0, count);
-    });
-  }
-
-  function updateParticipant(
-    index: number,
-    field: "fullName" | "age",
-    value: string
-  ) {
-    setParticipantsInfo((current) =>
-      current.map((person, i) =>
-        i === index
-          ? {
-              ...person,
-              [field]: value,
-            }
-          : person
-      )
-    );
-  }
-
-  function changeDeparture(departureId: string) {
-    setSelDep(departureId);
-    setBooking({
-      loading: false,
-      done: false,
-      error: null,
-    });
-
-    const departure = tour?.departures.find(
-      (d) => d.id === departureId
-    );
-
-    if (
-      departure &&
-      participants > departure.spotsLeft
-    ) {
-      changeParticipantCount(
-        Math.max(1, departure.spotsLeft)
-      );
-    }
-  }
-
-  async function book() {
-    if (!selDep) return;
-
-    if (!user) {
-      router.push("/login");
-      return;
-    }
-
-    if (tour && user.id === tour.guide.id) {
-      setBooking({
-        loading: false,
-        done: false,
-        error: "Ne možete rezervisati sopstvenu turu.",
-      });
-      return;
-    }
-
-    for (let i = 0; i < participantsInfo.length; i++) {
-      const person = participantsInfo[i];
-
-      if (person.fullName.trim().length < 3) {
-        setBooking({
-          loading: false,
-          done: false,
-          error: `Unesite ime i prezime za učesnika ${i + 1}.`,
-        });
-        return;
-      }
-
-      const age = Number(person.age);
-
-      if (
-        !Number.isInteger(age) ||
-        age < 1 ||
-        age > 120
-      ) {
-        setBooking({
-          loading: false,
-          done: false,
-          error: `Unesite ispravnu starost za učesnika ${i + 1}.`,
-        });
-        return;
-      }
-    }
-
-    setBooking({
-      loading: true,
-      done: false,
-      error: null,
-    });
-
-    try {
-      const res = await fetch("/api/bookings", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-
-        body: JSON.stringify({
-          tourId: id,
-          departureId: selDep,
-          participants,
-
-          participantsInfo: participantsInfo.map(
-            (person) => ({
-              fullName: person.fullName.trim(),
-              age: Number(person.age),
-            })
-          ),
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setBooking({
-          loading: false,
-          done: false,
-          error:
-            data.error ||
-            "Rezervacija nije uspjela.",
-        });
-
-        return;
-      }
-
-      setBooking({
-        loading: false,
-        done: true,
-        error: null,
-      });
-
-      // Lokalno smanji broj slobodnih mjesta
-      setTour((current) => {
-        if (!current) return current;
-
-        return {
-          ...current,
-
-          departures: current.departures.map((d) =>
-            d.id === selDep
-              ? {
-                  ...d,
-                  spotsLeft:
-                    d.spotsLeft - participants,
-                }
-              : d
-          ),
-        };
-      });
-    } catch {
-      setBooking({
-        loading: false,
-        done: false,
-        error:
-          "Došlo je do greške. Pokušajte ponovo.",
-      });
-    }
-  }
-
-  async function startTracking() {
-    if (!selDep) return;
-
-    const res = await fetch("/api/tracking/start", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        departureId: selDep,
-      }),
-    });
-
-    const d = await res.json();
-
-    if (res.ok) {
-      router.push(`/tracking/${d.session.id}`);
-    }
-  }
-
-  if (!tour) {
+  /*
+   * =======================================================
+   * LOADING
+   * =======================================================
+   */
+  if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-foreground/40">
-        Učitavanje...
-      </div>
+      <main className="mx-auto max-w-5xl px-4 py-8">
+        <div className="rounded-2xl border border-black/10 bg-white p-8 text-center">
+          Učitavanje ture...
+        </div>
+      </main>
     );
   }
 
-  const selectedDeparture = tour.departures.find(
-    (d) => d.id === selDep
+  /*
+   * =======================================================
+   * GREŠKA
+   * =======================================================
+   */
+  if (
+    error ||
+    !tour
+  ) {
+    return (
+      <main className="mx-auto max-w-5xl px-4 py-8">
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
+          {error ||
+            "Tura nije pronađena."}
+        </div>
+
+        <button
+          type="button"
+          onClick={() =>
+            router.back()
+          }
+          className="mt-4 rounded-xl border border-black/10 bg-white px-4 py-2 text-sm font-medium"
+        >
+          ← Nazad
+        </button>
+      </main>
+    );
+  }
+
+  /*
+   * Fotografije već dolaze
+   * sortirane po position iz API-ja,
+   * ali ih dodatno sortiramo radi
+   * sigurnosti.
+   */
+  const images = [
+    ...(tour.images ?? []),
+  ].sort(
+    (a, b) =>
+      a.position -
+      b.position
   );
 
-  const isOwnTour =
-    !!user && user.id === tour.guide.id;
+  const hasImages =
+    images.length > 0;
+
+  const hasMultipleImages =
+    images.length > 1;
+
+  const selectedImage =
+    images[currentImage];
+
+  function previousImage() {
+    if (
+      images.length <= 1
+    ) {
+      return;
+    }
+
+    setCurrentImage(
+      (current) =>
+        current === 0
+          ? images.length - 1
+          : current - 1
+    );
+  }
+
+  function nextImage() {
+    if (
+      images.length <= 1
+    ) {
+      return;
+    }
+
+    setCurrentImage(
+      (current) =>
+        current ===
+        images.length - 1
+          ? 0
+          : current + 1
+    );
+  }
 
   return (
-    <div className="pb-24">
-      <Navbar />
+    <main className="mx-auto max-w-5xl px-4 py-6 sm:py-8">
+      {/* NAZAD */}
+      <button
+        type="button"
+        onClick={() =>
+          router.back()
+        }
+        className="mb-4 text-sm font-medium text-brand-dark hover:underline"
+      >
+        ← Nazad
+      </button>
 
-      <div className="flex h-48 items-center justify-center bg-brand-light">
-        <div className="text-center">
-          <div className="text-6xl">
-            {TRANSPORT[tour.transportMode]?.charAt(0) ??
-              ""}
-          </div>
+      <div className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm">
 
-          <div className="mt-2 text-sm font-medium text-brand-dark">
-            {tour.activityType.name}
-          </div>
-        </div>
-      </div>
+        {/* =============================================== */}
+        {/* GALERIJA FOTOGRAFIJA */}
+        {/* =============================================== */}
 
-      <div className="p-4">
-        <div className="flex items-start justify-between gap-2">
-          <h1 className="text-xl font-medium">
-            {tour.title}
-          </h1>
+        {hasImages &&
+        selectedImage ? (
+          <div>
+            <div className="relative bg-black">
+              <img
+                src={
+                  selectedImage.url
+                }
+                alt={`${tour.title} - fotografija ${
+                  currentImage +
+                  1
+                }`}
+                className="h-64 w-full object-cover sm:h-80 md:h-[430px]"
+              />
 
-          <div className="flex gap-1">
-            <button
-              onClick={() => setLang("sr")}
-              className={`rounded px-2 py-1 text-xs ${
-                lang === "sr"
-                  ? "bg-brand text-white"
-                  : "border border-black/10 text-foreground/60"
-              }`}
-            >
-              SRP
-            </button>
-
-            <button
-              onClick={() => setLang("en")}
-              className={`rounded px-2 py-1 text-xs ${
-                lang === "en"
-                  ? "bg-brand text-white"
-                  : "border border-black/10 text-foreground/60"
-              }`}
-            >
-              ENG
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-1 flex items-center gap-2 text-sm text-foreground/60">
-          <span>
-            Vodič: {tour.guide.fullName}
-            {tour.guide.guideCertified ? " ✓" : ""}
-          </span>
-
-          {tour.avgRating && (
-            <span className="text-amber-500">
-              ★ {tour.avgRating.toFixed(1)} (
-              {tour.reviewCount})
-            </span>
-          )}
-        </div>
-
-        <div className="mt-3 flex flex-wrap gap-2 text-xs">
-          <span className="rounded-full bg-brand-light px-3 py-1 text-brand-dark">
-            {DIFF[tour.difficulty]}
-          </span>
-
-          <span className="rounded-full bg-brand-light px-3 py-1 text-brand-dark">
-            {TRANSPORT[tour.transportMode]}
-          </span>
-
-          {tour.route?.distanceKm && (
-            <span className="rounded-full bg-black/5 px-3 py-1">
-              {tour.route.distanceKm} km
-            </span>
-          )}
-
-          {tour.route?.elevationGainM && (
-            <span className="rounded-full bg-black/5 px-3 py-1">
-              +{tour.route.elevationGainM}m visine
-            </span>
-          )}
-
-          {tour.durationMinutes && (
-            <span className="rounded-full bg-black/5 px-3 py-1">
-              ⏱ {Math.floor(tour.durationMinutes / 60)}
-              h {tour.durationMinutes % 60}min
-            </span>
-          )}
-        </div>
-
-        <p className="mt-4 text-sm leading-relaxed text-foreground/70">
-          {lang === "sr"
-            ? tour.descriptionSr
-            : tour.descriptionEn ||
-              tour.descriptionSr}
-        </p>
-
-        {tour.route && tour.route.points.length >= 2 && (
-          <div className="mt-4 overflow-hidden rounded-2xl border border-black/10">
-            <div className="p-4">
-              <p className="text-sm font-medium">
-                🗺️ Planirana ruta
-              </p>
-
-              <div className="mt-2 flex flex-wrap gap-2">
-                {tour.route.distanceKm != null && (
-                  <span className="rounded-full bg-black/5 px-2.5 py-1 text-xs">
-                    🥾 {tour.route.distanceKm} km
-                  </span>
-                )}
-
-                {tour.route.elevationGainM != null && (
-                  <span className="rounded-full bg-black/5 px-2.5 py-1 text-xs">
-                    ↗ +{tour.route.elevationGainM} m
-                  </span>
-                )}
-
-                {tour.durationMinutes != null && (
-                  <span className="rounded-full bg-black/5 px-2.5 py-1 text-xs">
-                    ⏱ {Math.floor(tour.durationMinutes / 60)}h{" "}
-                    {tour.durationMinutes % 60}min
-                  </span>
-                )}
-              </div>
-
-              {tour.route.startLabel && (
-                <p className="mt-3 text-xs text-foreground/60">
-                  🟢 Početak: {tour.route.startLabel}
-                </p>
-              )}
-
-              {tour.route.endLabel && (
-                <p className="mt-1 text-xs text-foreground/60">
-                  🏁 Cilj: {tour.route.endLabel}
-                </p>
-              )}
-
-              <button
-                type="button"
-                onClick={() => setShowRoute((v) => !v)}
-                className="mt-3 w-full rounded-xl bg-brand-light py-2.5 text-sm font-medium text-brand-dark"
-              >
-                {showRoute
-                  ? "▲ Sakrij rutu"
-                  : "🗺️ Prikaži rutu na mapi"}
-              </button>
-            </div>
-
-            {showRoute && (
-              <div className="border-t border-black/10 p-2">
-                <TourRouteMap
-                  points={tour.route.points}
-                  startLat={tour.route.startLat}
-                  startLng={tour.route.startLng}
-                  endLat={tour.route.endLat}
-                  endLng={tour.route.endLng}
-                />
-              </div>
-            )}
-          </div>
-        )}
-
-        {tour.meetingPoint && (
-          <div className="mt-3 rounded-xl bg-black/5 p-3 text-sm">
-            <span className="font-medium">
-              📍 Polazna tačka:
-            </span>{" "}
-            {tour.meetingPoint}
-          </div>
-        )}
-
-        {tour.includesItems.length > 0 && (
-          <div className="mt-3">
-            <p className="mb-1 text-sm font-medium">
-              Uključeno:
-            </p>
-
-            <div className="flex flex-wrap gap-1.5">
-              {tour.includesItems.map((i) => (
-                <span
-                  key={i}
-                  className="rounded-full bg-brand-light px-2.5 py-1 text-xs text-brand-dark"
-                >
-                  ✓ {i}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {tour.guide.guideBio && (
-          <div className="mt-4 rounded-xl bg-black/3 p-3">
-            <p className="text-xs font-medium text-foreground/60">
-              O vodiču
-            </p>
-
-            <p className="mt-1 text-sm text-foreground/70">
-              {tour.guide.guideBio}
-            </p>
-          </div>
-        )}
-
-        <div className="mt-5 rounded-2xl border border-black/10 p-4">
-          <p className="text-sm font-medium">
-            Rezerviši turu
-          </p>
-
-          {isOwnTour ? (
-            <div className="mt-3 rounded-xl bg-black/5 p-4">
-              <p className="text-sm font-medium">
-                Ovo je vaša tura.
-              </p>
-
-              <p className="mt-1 text-xs text-foreground/60">
-                Kao vodič ne možete rezervisati
-                sopstvenu turu.
-              </p>
-
-              <Link
-                href="/profile"
-                className="mt-3 block rounded-lg border border-black/10 py-2.5 text-center text-sm"
-              >
-                Pogledaj prijavljene učesnike
-              </Link>
-            </div>
-          ) : tour.departures.length === 0 ? (
-            <p className="mt-2 text-sm text-foreground/50">
-              Nema dostupnih termina.
-            </p>
-          ) : (
-            <>
-              <div className="mt-2">
-                <label className="mb-1 block text-xs text-foreground/60">
-                  Termin polaska
-                </label>
-
-                <select
-                  value={selDep}
-                  onChange={(e) =>
-                    changeDeparture(e.target.value)
+              {/* Brojač */}
+              {hasMultipleImages && (
+                <div className="absolute right-3 top-3 rounded-full bg-black/65 px-3 py-1.5 text-xs font-medium text-white shadow">
+                  {currentImage +
+                    1}{" "}
+                  /{" "}
+                  {
+                    images.length
                   }
-                  className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm"
-                >
-                  {tour.departures.map((d) => (
-                    <option
-                      key={d.id}
-                      value={d.id}
-                    >
-                      {new Date(
-                        d.startsAt
-                      ).toLocaleDateString(
-                        "sr-Latn",
-                        {
-                          weekday: "short",
-                          day: "numeric",
-                          month: "long",
-                        }
-                      )}{" "}
-                      · {d.spotsLeft} mjesta
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="mt-3">
-                <label className="mb-1 block text-xs text-foreground/60">
-                  Broj učesnika
-                </label>
-
-                <input
-                  type="number"
-                  min={1}
-                  max={
-                    selectedDeparture?.spotsLeft ??
-                    tour.maxParticipants
-                  }
-                  value={participants}
-                  onChange={(e) =>
-                    changeParticipantCount(
-                      Number(e.target.value)
-                    )
-                  }
-                  className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm"
-                />
-              </div>
-
-              <div className="mt-4">
-                <p className="mb-2 text-sm font-medium">
-                  Podaci o učesnicima
-                </p>
-
-                <p className="mb-3 text-xs text-foreground/50">
-                  Unesite ime i prezime i starost
-                  za svaku osobu koja ide na turu.
-                </p>
-
-                <div className="flex flex-col gap-3">
-                  {participantsInfo.map(
-                    (person, index) => (
-                      <div
-                        key={index}
-                        className="rounded-xl border border-black/8 p-3"
-                      >
-                        <p className="mb-2 text-xs font-medium text-brand-dark">
-                          Učesnik {index + 1}
-                        </p>
-
-                        <div>
-                          <label className="mb-1 block text-xs text-foreground/60">
-                            Ime i prezime
-                          </label>
-
-                          <input
-                            type="text"
-                            value={
-                              person.fullName
-                            }
-                            onChange={(e) =>
-                              updateParticipant(
-                                index,
-                                "fullName",
-                                e.target.value
-                              )
-                            }
-                            placeholder="npr. Marko Marković"
-                            className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm outline-none focus:border-brand"
-                          />
-                        </div>
-
-                        <div className="mt-2">
-                          <label className="mb-1 block text-xs text-foreground/60">
-                            Starost
-                          </label>
-
-                          <input
-                            type="number"
-                            min={1}
-                            max={120}
-                            value={person.age}
-                            onChange={(e) =>
-                              updateParticipant(
-                                index,
-                                "age",
-                                e.target.value
-                              )
-                            }
-                            placeholder="npr. 35"
-                            className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm outline-none focus:border-brand"
-                          />
-                        </div>
-                      </div>
-                    )
-                  )}
                 </div>
-              </div>
-
-              <div className="mt-4 flex items-center justify-between">
-                <span className="text-sm text-foreground/60">
-                  Ukupno:
-                </span>
-
-                <span className="text-lg font-medium text-brand-dark">
-                  €
-                  {(
-                    tour.pricePerPerson *
-                    participants
-                  ).toFixed(2)}
-                </span>
-              </div>
-
-              {booking.error && (
-                <p className="mt-2 rounded-lg bg-red-50 p-3 text-sm text-red-600">
-                  {booking.error}
-                </p>
               )}
 
-              {booking.done ? (
-                <p className="mt-3 rounded-xl bg-brand-light p-3 text-sm text-brand-dark">
-                  ✓ Rezervacija potvrđena!
-                </p>
-              ) : (
+              {/* Lijeva strelica */}
+              {hasMultipleImages && (
                 <button
-                  onClick={book}
-                  disabled={
-                    booking.loading ||
-                    !selectedDeparture ||
-                    selectedDeparture.spotsLeft < 1
+                  type="button"
+                  onClick={
+                    previousImage
                   }
-                  className="mt-3 w-full rounded-xl bg-brand py-3 text-sm font-medium text-white disabled:opacity-60"
+                  aria-label="Prethodna fotografija"
+                  className="absolute left-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-3xl leading-none text-white shadow transition hover:bg-black/75"
                 >
-                  {booking.loading
-                    ? "Rezervisanje..."
-                    : `Rezerviši za €${(
-                        tour.pricePerPerson *
-                        participants
-                      ).toFixed(2)}`}
+                  ‹
                 </button>
               )}
 
-              <button
-                onClick={startTracking}
-                className="mt-2 w-full rounded-xl border border-brand py-3 text-sm font-medium text-brand"
-              >
-                📍 Počni live tracking
-              </button>
-            </>
-          )}
-        </div>
-
-        {!isOwnTour && (
-          <Link
-            href={`/messages/new?recipientId=${tour.guide.id}`}
-            className="mt-2 block w-full rounded-xl border border-black/10 py-3 text-center text-sm text-foreground/70"
-          >
-            💬 Kontaktiraj vodiča
-          </Link>
-        )}
-
-        {tour.reviews.length > 0 && (
-          <div className="mt-6">
-            <p className="mb-3 font-medium">
-              Recenzije ({tour.reviewCount})
-            </p>
-
-            <div className="flex flex-col gap-3">
-              {tour.reviews.map((r) => (
-                <div
-                  key={r.id}
-                  className="rounded-xl border border-black/8 p-3"
+              {/* Desna strelica */}
+              {hasMultipleImages && (
+                <button
+                  type="button"
+                  onClick={
+                    nextImage
+                  }
+                  aria-label="Sljedeća fotografija"
+                  className="absolute right-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-3xl leading-none text-white shadow transition hover:bg-black/75"
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">
-                      {r.author.fullName}
-                    </span>
+                  ›
+                </button>
+              )}
+            </div>
 
-                    <StarRating
-                      value={r.rating}
-                      size="sm"
-                    />
-                  </div>
+            {/* Male fotografije */}
+            {hasMultipleImages && (
+              <div className="flex gap-2 overflow-x-auto border-b border-black/10 bg-white p-3">
+                {images.map(
+                  (
+                    image,
+                    index
+                  ) => (
+                    <button
+                      key={
+                        image.id
+                      }
+                      type="button"
+                      onClick={() =>
+                        setCurrentImage(
+                          index
+                        )
+                      }
+                      className={`shrink-0 overflow-hidden rounded-xl border-2 transition ${
+                        currentImage ===
+                        index
+                          ? "border-brand"
+                          : "border-transparent opacity-70 hover:opacity-100"
+                      }`}
+                      aria-label={`Prikaži fotografiju ${
+                        index +
+                        1
+                      }`}
+                    >
+                      <img
+                        src={
+                          image.url
+                        }
+                        alt={`${tour.title} ${
+                          index +
+                          1
+                        }`}
+                        className="h-16 w-24 object-cover sm:h-20 sm:w-28"
+                      />
+                    </button>
+                  )
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          /*
+           * Stare ture bez fotografija.
+           */
+          <div className="flex h-48 items-center justify-center bg-brand-light sm:h-56">
+            <div className="text-center">
+              <div className="text-5xl">
+                📍
+              </div>
 
-                  {r.comment && (
-                    <p className="mt-1.5 text-sm text-foreground/65">
-                      {r.comment}
-                    </p>
-                  )}
-
-                  {r.tags.length > 0 && (
-                    <div className="mt-1.5 flex flex-wrap gap-1">
-                      {r.tags.map((t) => (
-                        <span
-                          key={t}
-                          className="rounded-full bg-brand-light px-2 py-0.5 text-[11px] text-brand-dark"
-                        >
-                          {t}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
+              <div className="mt-2 text-sm font-medium text-brand-dark">
+                {
+                  tour
+                    .activityType
+                    .name
+                }
+              </div>
             </div>
           </div>
         )}
+
+        {/* =============================================== */}
+        {/* OSNOVNI PODACI */}
+        {/* =============================================== */}
+
+        <div className="p-5 sm:p-7">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="mb-2 text-sm font-medium text-brand">
+                {
+                  tour
+                    .activityType
+                    .name
+                }
+              </div>
+
+              <h1 className="text-2xl font-bold sm:text-3xl">
+                {tour.title}
+              </h1>
+
+              <div className="mt-3 flex flex-wrap gap-2 text-sm text-foreground/65">
+                <span className="rounded-full bg-black/5 px-3 py-1">
+                  {
+                    DIFFICULTY[
+                      tour
+                        .difficulty
+                    ] ??
+                    tour.difficulty
+                  }
+                </span>
+
+                <span className="rounded-full bg-black/5 px-3 py-1">
+                  {
+                    TRANSPORT[
+                      tour
+                        .transportMode
+                    ] ??
+                    tour
+                      .transportMode
+                  }
+                </span>
+
+                <span className="rounded-full bg-black/5 px-3 py-1">
+                  ⏱{" "}
+                  {formatDuration(
+                    tour.durationMinutes
+                  )}
+                </span>
+              </div>
+            </div>
+
+            <div className="shrink-0 sm:text-right">
+              <div className="text-3xl font-bold text-brand-dark">
+                €
+                {
+                  tour.pricePerPerson
+                }
+              </div>
+
+              <div className="text-sm text-foreground/50">
+                po osobi
+              </div>
+            </div>
+          </div>
+
+          {/* OCJENA */}
+
+          <div className="mt-5 flex items-center gap-2 text-sm">
+            <span className="text-lg">
+              ⭐
+            </span>
+
+            {tour.avgRating !==
+            null ? (
+              <>
+                <strong>
+                  {tour.avgRating.toFixed(
+                    1
+                  )}
+                </strong>
+
+                <span className="text-foreground/50">
+                  (
+                  {
+                    tour.reviewCount
+                  }{" "}
+                  recenzija)
+                </span>
+              </>
+            ) : (
+              <span className="text-foreground/50">
+                Još nema recenzija
+              </span>
+            )}
+          </div>
+
+          {/* OPIS */}
+
+          <section className="mt-7">
+            <h2 className="text-lg font-semibold">
+              Opis ture
+            </h2>
+
+            <p className="mt-2 whitespace-pre-line leading-7 text-foreground/75">
+              {
+                tour.descriptionSr
+              }
+            </p>
+          </section>
+
+          {/* ============================================= */}
+          {/* DETALJI */}
+          {/* ============================================= */}
+
+          <section className="mt-7">
+            <h2 className="text-lg font-semibold">
+              Detalji
+            </h2>
+
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="rounded-xl bg-black/[0.03] p-4">
+                <div className="text-xs text-foreground/50">
+                  Maksimalno učesnika
+                </div>
+
+                <div className="mt-1 font-semibold">
+                  {
+                    tour.maxParticipants
+                  }
+                </div>
+              </div>
+
+              <div className="rounded-xl bg-black/[0.03] p-4">
+                <div className="text-xs text-foreground/50">
+                  Trajanje
+                </div>
+
+                <div className="mt-1 font-semibold">
+                  {formatDuration(
+                    tour.durationMinutes
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-xl bg-black/[0.03] p-4">
+                <div className="text-xs text-foreground/50">
+                  Prevoz
+                </div>
+
+                <div className="mt-1 font-semibold">
+                  {
+                    TRANSPORT[
+                      tour
+                        .transportMode
+                    ] ??
+                    tour
+                      .transportMode
+                  }
+                </div>
+              </div>
+
+              {tour.route
+                ?.distanceKm !=
+                null && (
+                <div className="rounded-xl bg-black/[0.03] p-4">
+                  <div className="text-xs text-foreground/50">
+                    Dužina rute
+                  </div>
+
+                  <div className="mt-1 font-semibold">
+                    {
+                      tour
+                        .route
+                        .distanceKm
+                    }{" "}
+                    km
+                  </div>
+                </div>
+              )}
+
+              {tour.route
+                ?.elevationGainM !=
+                null && (
+                <div className="rounded-xl bg-black/[0.03] p-4">
+                  <div className="text-xs text-foreground/50">
+                    Uspon
+                  </div>
+
+                  <div className="mt-1 font-semibold">
+                    +
+                    {
+                      tour
+                        .route
+                        .elevationGainM
+                    }{" "}
+                    m
+                  </div>
+                </div>
+              )}
+
+              {tour.meetingPoint && (
+                <div className="rounded-xl bg-black/[0.03] p-4">
+                  <div className="text-xs text-foreground/50">
+                    Mjesto sastanka
+                  </div>
+
+                  <div className="mt-1 font-semibold">
+                    {
+                      tour.meetingPoint
+                    }
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* ============================================= */}
+          {/* UKLJUČENO */}
+          {/* ============================================= */}
+
+          {tour.includesItems
+            .length >
+            0 && (
+            <section className="mt-7">
+              <h2 className="text-lg font-semibold">
+                Uključeno u cijenu
+              </h2>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                {tour.includesItems.map(
+                  (
+                    item,
+                    index
+                  ) => (
+                    <span
+                      key={`${item}-${index}`}
+                      className="rounded-full bg-brand-light px-3 py-2 text-sm text-brand-dark"
+                    >
+                      ✓ {item}
+                    </span>
+                  )
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* ============================================= */}
+          {/* VODIČ */}
+          {/* ============================================= */}
+
+          <section className="mt-7">
+            <h2 className="text-lg font-semibold">
+              Vodič
+            </h2>
+
+            <div className="mt-3 rounded-xl border border-black/10 p-4">
+              <div className="flex items-center gap-3">
+                {tour.guide
+                  .avatarUrl ? (
+                  <img
+                    src={
+                      tour.guide
+                        .avatarUrl
+                    }
+                    alt={
+                      tour.guide
+                        .fullName
+                    }
+                    className="h-12 w-12 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-light text-lg font-semibold text-brand-dark">
+                    {tour.guide.fullName
+                      .charAt(0)
+                      .toUpperCase()}
+                  </div>
+                )}
+
+                <div>
+                  <div className="font-semibold">
+                    {
+                      tour.guide
+                        .fullName
+                    }
+
+                    {tour.guide
+                      .guideCertified && (
+                      <span
+                        className="ml-2"
+                        title="Verifikovani vodič"
+                      >
+                        ✓
+                      </span>
+                    )}
+                  </div>
+
+                  {tour.guide
+                    .guideCertified && (
+                    <div className="text-xs text-brand">
+                      Verifikovani vodič
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {tour.guide
+                .guideBio && (
+                <p className="mt-3 text-sm leading-6 text-foreground/65">
+                  {
+                    tour.guide
+                      .guideBio
+                  }
+                </p>
+              )}
+            </div>
+          </section>
+
+          {/* ============================================= */}
+          {/* TERMINI */}
+          {/* ============================================= */}
+
+          <section className="mt-7">
+            <h2 className="text-lg font-semibold">
+              Dostupni termini
+            </h2>
+
+            {tour.departures
+              .length >
+            0 ? (
+              <div className="mt-3 space-y-3">
+                {tour.departures.map(
+                  (
+                    departure
+                  ) => (
+                    <div
+                      key={
+                        departure.id
+                      }
+                      className="flex flex-col gap-2 rounded-xl border border-black/10 p-4 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div>
+                        <div className="font-medium">
+                          {formatDate(
+                            departure.startsAt
+                          )}
+                        </div>
+
+                        {departure.bookingDeadline && (
+                          <div className="mt-1 text-xs text-foreground/50">
+                            Rezervacije
+                            do:{" "}
+                            {formatDate(
+                              departure.bookingDeadline
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="text-sm">
+                        <strong>
+                          {
+                            departure.spotsLeft
+                          }
+                        </strong>{" "}
+                        slobodnih
+                        mjesta
+                      </div>
+                    </div>
+                  )
+                )}
+              </div>
+            ) : (
+              <div className="mt-3 rounded-xl bg-black/[0.03] p-4 text-sm text-foreground/55">
+                Trenutno nema
+                dostupnih budućih
+                termina.
+              </div>
+            )}
+          </section>
+
+          {/* ============================================= */}
+          {/* RUTA */}
+          {/* ============================================= */}
+
+          {tour.route && (
+            <section className="mt-7">
+              <div className="flex items-center justify-between gap-4">
+                <h2 className="text-lg font-semibold">
+                  Ruta
+                </h2>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowRoute(
+                      (
+                        current
+                      ) =>
+                        !current
+                    )
+                  }
+                  className="rounded-xl border border-black/10 px-3 py-2 text-sm font-medium"
+                >
+                  {showRoute
+                    ? "Sakrij detalje"
+                    : "Prikaži detalje"}
+                </button>
+              </div>
+
+              {showRoute && (
+                <div className="mt-3 rounded-xl bg-black/[0.03] p-4">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div>
+                      <div className="text-xs text-foreground/50">
+                        Dužina
+                      </div>
+
+                      <div className="font-semibold">
+                        {tour.route
+                          .distanceKm ??
+                          "—"}{" "}
+                        {tour.route
+                          .distanceKm !=
+                        null
+                          ? "km"
+                          : ""}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-xs text-foreground/50">
+                        Uspon
+                      </div>
+
+                      <div className="font-semibold">
+                        {tour.route
+                          .elevationGainM !=
+                        null
+                          ? `+${tour.route.elevationGainM} m`
+                          : "—"}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-xs text-foreground/50">
+                        Procijenjeno vrijeme
+                      </div>
+
+                      <div className="font-semibold">
+                        {tour.route
+                          .estimatedMins !=
+                        null
+                          ? formatDuration(
+                              tour
+                                .route
+                                .estimatedMins
+                            )
+                          : "—"}
+                      </div>
+                    </div>
+                  </div>
+
+                  {tour.route
+                    .startLabel && (
+                    <div className="mt-4 text-sm">
+                      <strong>
+                        Početak:
+                      </strong>{" "}
+                      {
+                        tour.route
+                          .startLabel
+                      }
+                    </div>
+                  )}
+
+                  {tour.route
+                    .endLabel && (
+                    <div className="mt-1 text-sm">
+                      <strong>
+                        Kraj:
+                      </strong>{" "}
+                      {
+                        tour.route
+                          .endLabel
+                      }
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* ============================================= */}
+          {/* RECENZIJE */}
+          {/* ============================================= */}
+
+          <section className="mt-7">
+            <h2 className="text-lg font-semibold">
+              Recenzije
+            </h2>
+
+            {tour.reviews
+              .length >
+            0 ? (
+              <div className="mt-3 space-y-3">
+                {tour.reviews.map(
+                  (
+                    review
+                  ) => (
+                    <div
+                      key={
+                        review.id
+                      }
+                      className="rounded-xl border border-black/10 p-4"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="font-medium">
+                          {review
+                            .author
+                            ?.fullName ??
+                            "Korisnik"}
+                        </div>
+
+                        <div>
+                          {"⭐".repeat(
+                            Math.max(
+                              0,
+                              Math.min(
+                                5,
+                                review.rating
+                              )
+                            )
+                          )}
+                        </div>
+                      </div>
+
+                      {review.comment && (
+                        <p className="mt-2 text-sm leading-6 text-foreground/65">
+                          {
+                            review.comment
+                          }
+                        </p>
+                      )}
+                    </div>
+                  )
+                )}
+              </div>
+            ) : (
+              <div className="mt-3 rounded-xl bg-black/[0.03] p-4 text-sm text-foreground/55">
+                Ova tura još nema
+                recenzija.
+              </div>
+            )}
+          </section>
+        </div>
       </div>
-    </div>
+    </main>
   );
 }
