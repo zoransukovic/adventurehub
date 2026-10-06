@@ -1102,19 +1102,29 @@ async function saveFeaturedOrder(
                                 className="w-20 rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:border-brand"
                               />
 
-                              <button
-                                disabled={
-                                  saving
-                                }
-                                onClick={() =>
-                                  saveFeaturedOrder(
-                                    tour
-                                  )
-                                }
-                                className="rounded-lg bg-brand px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
-                              >
-                                Sačuvaj
-                              </button>
+                             <button
+  disabled={
+    saving ||
+    (orderDrafts[tour.id] ?? "") ===
+      (savedOrders[tour.id] ?? "")
+  }
+  onClick={() =>
+    saveFeaturedOrder(tour)
+  }
+  className={`rounded-lg px-3 py-2 text-xs font-medium ${
+    (orderDrafts[tour.id] ?? "") ===
+    (savedOrders[tour.id] ?? "")
+      ? "cursor-default bg-black/5 text-foreground/40"
+      : "bg-brand text-white"
+  } disabled:opacity-70`}
+>
+  {saving
+    ? "Čuvanje..."
+    : (orderDrafts[tour.id] ?? "") ===
+        (savedOrders[tour.id] ?? "")
+      ? "✓ Sačuvano"
+      : "Sačuvaj"}
+</button>
                             </div>
                           )}
                         </div>
