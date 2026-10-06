@@ -1,36 +1,38 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { guard } from "@/lib/guard";
 
 export async function PATCH(
-  req: NextRequest,
-  context: {
-    params: Promise<{
-      id: string;
-    }>;
-  }
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const { error } = await guard("ADMIN");
-  if (error) return error;
+
+  if (error) {
+    return error;
+  }
 
   try {
-    const { id } = await context.params;
-    const body = await req.json();
+    const { id } = await params;
+    const body = await request.json();
 
     const data: {
       featured?: boolean;
       featuredOrder?: number | null;
     } = {};
 
+    // Promjena statusa "Istaknuta"
     if (typeof body.featured === "boolean") {
       data.featured = body.featured;
 
-      if (body.featured === false) {
+      // Ako više nije istaknuta,
+      // brišemo i njen redosled.
+      if (!body.featured) {
         data.featuredOrder = null;
       }
     }
 
+    // Promjena redosleda
     if (
       body.featuredOrder === null ||
       body.featuredOrder === ""
@@ -39,10 +41,7 @@ export async function PATCH(
     } else if (body.featuredOrder !== undefined) {
       const order = Number(body.featuredOrder);
 
-      if (
-        !Number.isInteger(order) ||
-        order < 1
-      ) {
+      if (!Number.isInteger(order) || order < 1) {
         return NextResponse.json(
           {
             error:
@@ -87,11 +86,8 @@ export async function PATCH(
     return NextResponse.json({
       tour,
     });
-  } catch (error) {
-    console.error(
-      "ADMIN TOUR PATCH ERROR:",
-      error
-    );
+  } catch (err) {
+    console.error("ADMIN TOUR PATCH ERROR:", err);
 
     return NextResponse.json(
       {
