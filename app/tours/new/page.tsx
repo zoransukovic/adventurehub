@@ -517,7 +517,7 @@ function cancel() {
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="mb-1 block text-xs text-foreground/60">
-                  Cijena (€/osobi) *
+                  Cijena (€/po osobi) *
                 </label>
 
                 <input
