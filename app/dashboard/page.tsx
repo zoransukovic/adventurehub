@@ -355,7 +355,7 @@ export default function DashboardPage() {
                       {
                         t.pricePerPerson
                       }{" "}
-                      / osobi
+                      / po osobi
                     </div>
                   </div>
                 </Link>
