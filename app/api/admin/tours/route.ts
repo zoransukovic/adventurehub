@@ -1,23 +1,22 @@
-
 import { NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
+import { guard } from "@/lib/guard";
 
 export async function GET() {
+  const { error } = await guard("ADMIN");
+  if (error) return error;
+
   try {
     const tours = await prisma.tour.findMany({
-      orderBy: [
-        {
-          featured: "desc",
-        },
-        {
-          featuredOrder: "asc",
-        },
-        {
-          createdAt: "desc",
-        },
-      ],
+      select: {
+        id: true,
+        title: true,
+        active: true,
+        featured: true,
+        featuredOrder: true,
+        pricePerPerson: true,
+        createdAt: true,
 
-      include: {
         activityType: {
           select: {
             id: true,
@@ -37,9 +36,7 @@ export async function GET() {
           orderBy: {
             position: "asc",
           },
-
           take: 1,
-
           select: {
             id: true,
             url: true,
@@ -54,6 +51,18 @@ export async function GET() {
           },
         },
       },
+
+      orderBy: [
+        {
+          featured: "desc",
+        },
+        {
+          featuredOrder: "asc",
+        },
+        {
+          createdAt: "desc",
+        },
+      ],
     });
 
     return NextResponse.json({
@@ -67,8 +76,7 @@ export async function GET() {
 
     return NextResponse.json(
       {
-        error:
-          "Greška pri učitavanju tura.",
+        error: "Greška pri učitavanju tura.",
       },
       {
         status: 500,
