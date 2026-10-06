@@ -324,7 +324,7 @@ const [booking, setBooking] = useState<{
           onClick={() =>
             router.back()
           }
-          className="mt-4 rounded-xl border border-black/10 bg-white px-4 py-2 text-sm font-medium"
+          className="mt-3 rounded-xl border border-black/10 bg-white px-4 py-2 text-sm font-medium"
         >
           ← Nazad
         </button>
@@ -527,7 +527,7 @@ const [booking, setBooking] = useState<{
   }
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6 sm:py-8">
+    <main className="mx-auto max-w-5xl px-4 py-4 sm:py-6">
       {/* NAZAD */}
       <button
         type="button"
@@ -671,7 +671,7 @@ const [booking, setBooking] = useState<{
         {/* OSNOVNI PODACI */}
         {/* =============================================== */}
 
-        <div className="p-5 sm:p-7">
+        <div className="p-4 sm:p-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <div className="mb-2 text-sm font-medium text-brand">
@@ -682,7 +682,7 @@ const [booking, setBooking] = useState<{
                 }
               </div>
 
-              <h1 className="text-2xl font-bold sm:text-3xl">
+              <h1 className="text-xl font-bold sm:text-2xl">
                 {tour.title}
               </h1>
 
@@ -718,7 +718,7 @@ const [booking, setBooking] = useState<{
             </div>
 
             <div className="shrink-0 sm:text-right">
-              <div className="text-3xl font-bold text-brand-dark">
+              <div className="text-2xl font-bold text-brand-dark">
                 €
                 {
                   tour.pricePerPerson
@@ -733,7 +733,7 @@ const [booking, setBooking] = useState<{
 
           {/* OCJENA */}
 
-          <div className="mt-5 flex items-center gap-2 text-sm">
+          <div className="mt-4 flex items-center gap-2 text-sm">
             <span className="text-lg">
               ⭐
             </span>
@@ -764,12 +764,12 @@ const [booking, setBooking] = useState<{
 
           {/* OPIS */}
 
-          <section className="mt-7">
-            <h2 className="text-lg font-semibold">
+          <section className="mt-4">
+            <h2 className="text-base font-semibold">
               Opis ture
             </h2>
 
-            <p className="mt-2 whitespace-pre-line leading-7 text-foreground/75">
+            <p className="mt-2 whitespace-pre-line text-sm leading-6 text-foreground/75">
               {
                 tour.descriptionSr
               }
@@ -780,13 +780,13 @@ const [booking, setBooking] = useState<{
           {/* DETALJI */}
           {/* ============================================= */}
 
-          <section className="mt-7">
-            <h2 className="text-lg font-semibold">
+          <section className="mt-4">
+            <h2 className="text-base font-semibold">
               Detalji
             </h2>
 
-            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <div className="rounded-xl bg-black/[0.03] p-4">
+            <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="rounded-xl bg-black/[0.03] p-3">
                 <div className="text-xs text-foreground/50">
                   Maksimalno učesnika
                 </div>
@@ -798,7 +798,7 @@ const [booking, setBooking] = useState<{
                 </div>
               </div>
 
-              <div className="rounded-xl bg-black/[0.03] p-4">
+              <div className="rounded-xl bg-black/[0.03] p-3">
                 <div className="text-xs text-foreground/50">
                   Trajanje
                 </div>
@@ -810,7 +810,7 @@ const [booking, setBooking] = useState<{
                 </div>
               </div>
 
-              <div className="rounded-xl bg-black/[0.03] p-4">
+              <div className="rounded-xl bg-black/[0.03] p-3">
                 <div className="text-xs text-foreground/50">
                   Prevoz
                 </div>
@@ -830,7 +830,7 @@ const [booking, setBooking] = useState<{
               {tour.route
                 ?.distanceKm !=
                 null && (
-                <div className="rounded-xl bg-black/[0.03] p-4">
+                <div className="rounded-xl bg-black/[0.03] p-3">
                   <div className="text-xs text-foreground/50">
                     Dužina rute
                   </div>
@@ -849,7 +849,7 @@ const [booking, setBooking] = useState<{
               {tour.route
                 ?.elevationGainM !=
                 null && (
-                <div className="rounded-xl bg-black/[0.03] p-4">
+                <div className="rounded-xl bg-black/[0.03] p-3">
                   <div className="text-xs text-foreground/50">
                     Uspon
                   </div>
@@ -867,7 +867,7 @@ const [booking, setBooking] = useState<{
               )}
 
               {tour.meetingPoint && (
-                <div className="rounded-xl bg-black/[0.03] p-4">
+                <div className="rounded-xl bg-black/[0.03] p-3">
                   <div className="text-xs text-foreground/50">
                     Mjesto sastanka
                   </div>
@@ -889,8 +889,8 @@ const [booking, setBooking] = useState<{
           {tour.includesItems
             .length >
             0 && (
-            <section className="mt-7">
-              <h2 className="text-lg font-semibold">
+            <section className="mt-4">
+              <h2 className="text-base font-semibold">
                 Uključeno u cijenu
               </h2>
 
@@ -916,12 +916,12 @@ const [booking, setBooking] = useState<{
           {/* VODIČ */}
           {/* ============================================= */}
 
-          <section className="mt-7">
-            <h2 className="text-lg font-semibold">
+          <section className="mt-4">
+            <h2 className="text-base font-semibold">
               Vodič
             </h2>
 
-            <div className="mt-3 rounded-xl border border-black/10 p-4">
+            <div className="mt-2 rounded-xl border border-black/10 p-3">
               <div className="flex items-center gap-3">
                 {tour.guide
                   .avatarUrl ? (
@@ -937,7 +937,7 @@ const [booking, setBooking] = useState<{
                     className="h-12 w-12 rounded-full object-cover"
                   />
                 ) : (
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-light text-lg font-semibold text-brand-dark">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-light text-base font-semibold text-brand-dark">
                     {tour.guide.fullName
                       .charAt(0)
                       .toUpperCase()}
@@ -987,17 +987,17 @@ const [booking, setBooking] = useState<{
 {/* REZERVACIJA */}
 {/* ============================================= */}
 
-<section className="mt-7">
-  <h2 className="text-lg font-semibold">
+<section className="mt-4">
+  <h2 className="text-base font-semibold">
     Rezerviši turu
   </h2>
 
   {tour.departures.length === 0 ? (
-    <div className="mt-3 rounded-xl bg-black/[0.03] p-4 text-sm text-foreground/55">
+    <div className="mt-3 rounded-xl bg-black/[0.03] p-3 text-sm text-foreground/55">
       Trenutno nema dostupnih budućih termina.
     </div>
   ) : (
-    <div className="mt-3 rounded-2xl border border-black/10 p-4">
+    <div className="mt-2 rounded-2xl border border-black/10 p-3">
 
       {/* TERMIN */}
 
@@ -1044,7 +1044,7 @@ const [booking, setBooking] = useState<{
             }
           }
         }}
-        className="w-full rounded-xl border border-black/10 bg-white px-3 py-3 text-sm"
+        className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
       >
         <option value="">
           Izaberite termin
@@ -1065,7 +1065,7 @@ const [booking, setBooking] = useState<{
 
       {/* BROJ UČESNIKA */}
 
-      <div className="mt-4">
+      <div className="mt-3">
         <label className="mb-1 block text-xs text-foreground/60">
           Broj učesnika
         </label>
@@ -1082,7 +1082,7 @@ const [booking, setBooking] = useState<{
             )
           }
           onBlur={participantBlur}
-          className="w-full rounded-xl border border-black/10 px-3 py-3 text-sm outline-none focus:border-brand"
+          className="w-full rounded-xl border border-black/10 px-3 py-2 text-sm outline-none focus:border-brand"
         />
 
         {selectedDeparture && (
@@ -1097,7 +1097,7 @@ const [booking, setBooking] = useState<{
 
       {participantsInput !== "" &&
         Number(participantsInput) >= 1 && (
-          <div className="mt-5">
+          <div className="mt-4">
             <h3 className="font-medium">
               Podaci o učesnicima
             </h3>
@@ -1107,7 +1107,7 @@ const [booking, setBooking] = useState<{
               za svaku osobu.
             </p>
 
-            <div className="mt-3 space-y-3">
+            <div className="mt-3 space-y-2">
               {participantsInfo
                 .slice(
                   0,
@@ -1137,7 +1137,7 @@ const [booking, setBooking] = useState<{
                         )
                       }
                       placeholder="npr. Marko Marković"
-                      className="w-full rounded-xl border border-black/10 px-3 py-2.5 text-sm outline-none focus:border-brand"
+                      className="w-full rounded-xl border border-black/10 px-3 py-2 text-sm outline-none focus:border-brand"
                     />
 
                     <label className="mb-1 mt-3 block text-xs text-foreground/60">
@@ -1157,7 +1157,7 @@ const [booking, setBooking] = useState<{
                         )
                       }
                       placeholder="npr. 35"
-                      className="w-full rounded-xl border border-black/10 px-3 py-2.5 text-sm outline-none focus:border-brand"
+                      className="w-full rounded-xl border border-black/10 px-3 py-2 text-sm outline-none focus:border-brand"
                     />
                   </div>
                 ))}
@@ -1167,7 +1167,7 @@ const [booking, setBooking] = useState<{
 
       {/* UKUPNO */}
 
-      <div className="mt-5 flex items-center justify-between border-t border-black/10 pt-4">
+      <div className="mt-4 flex items-center justify-between border-t border-black/10 pt-3">
         <span className="text-sm text-foreground/60">
           Ukupno:
         </span>
@@ -1206,7 +1206,7 @@ const [booking, setBooking] = useState<{
             Number(participantsInput) < 1 ||
             (selectedDeparture?.spotsLeft ?? 0) < 1
           }
-          className="mt-4 w-full rounded-xl bg-brand px-4 py-3 font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+          className="mt-3 w-full rounded-xl bg-brand px-4 py-3 font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
         >
           {booking.loading
             ? "Rezervisanje..."
@@ -1225,9 +1225,9 @@ const [booking, setBooking] = useState<{
           {/* ============================================= */}
 
           {tour.route && (
-            <section className="mt-7">
+            <section className="mt-4">
               <div className="flex items-center justify-between gap-4">
-                <h2 className="text-lg font-semibold">
+                <h2 className="text-base font-semibold">
                   Ruta
                 </h2>
 
@@ -1250,7 +1250,7 @@ const [booking, setBooking] = useState<{
               </div>
 
               {showRoute && (
-                <div className="mt-3 rounded-xl bg-black/[0.03] p-4">
+                <div className="mt-3 rounded-xl bg-black/[0.03] p-3">
                   <div className="grid gap-3 sm:grid-cols-3">
                     <div>
                       <div className="text-xs text-foreground/50">
@@ -1304,7 +1304,7 @@ const [booking, setBooking] = useState<{
 
                   {tour.route
                     .startLabel && (
-                    <div className="mt-4 text-sm">
+                    <div className="mt-3 text-sm">
                       <strong>
                         Početak:
                       </strong>{" "}
@@ -1336,15 +1336,15 @@ const [booking, setBooking] = useState<{
           {/* RECENZIJE */}
           {/* ============================================= */}
 
-          <section className="mt-7">
-            <h2 className="text-lg font-semibold">
+          <section className="mt-4">
+            <h2 className="text-base font-semibold">
               Recenzije
             </h2>
 
             {tour.reviews
               .length >
             0 ? (
-              <div className="mt-3 space-y-3">
+              <div className="mt-3 space-y-2">
                 {tour.reviews.map(
                   (
                     review
@@ -1388,7 +1388,7 @@ const [booking, setBooking] = useState<{
                 )}
               </div>
             ) : (
-              <div className="mt-3 rounded-xl bg-black/[0.03] p-4 text-sm text-foreground/55">
+              <div className="mt-3 rounded-xl bg-black/[0.03] p-3 text-sm text-foreground/55">
                 Ova tura još nema
                 recenzija.
               </div>
