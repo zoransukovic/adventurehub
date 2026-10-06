@@ -15,11 +15,161 @@ type Props = {
 const MAX_IMAGES = 5;
 
 /*
- * Server upload preko Vercel funkcije ima
- * ograničenje veličine requesta, zato
- * koristimo maksimalno 4 MB po fotografiji.
+ * Maksimalna veličina originalnog fajla
+ * koji korisnik može izabrati.
  */
 const MAX_SIZE = 4 * 1024 * 1024;
+
+/*
+ * Fotografija se prije uploada automatski
+ * smanjuje. Duža strana će imati najviše
+ * 1500 px.
+ */
+const MAX_DIMENSION = 1500;
+
+/*
+ * JPEG kvalitet nakon optimizacije.
+ * 0.82 = 82%
+ */
+const JPEG_QUALITY = 0.82;
+
+/*
+ * Automatska optimizacija fotografije.
+ *
+ * - zadržava originalni odnos stranica
+ * - smanjuje dužu stranu na max 1500 px
+ * - pretvara fotografiju u JPEG
+ * - kvalitet 82%
+ *
+ * Odnos 3:2 koristimo prilikom prikaza
+ * fotografije pomoću object-cover.
+ */
+async function optimizeImage(
+  file: File
+): Promise<File> {
+  const imageUrl =
+    URL.createObjectURL(file);
+
+  try {
+    const img =
+      await new Promise<HTMLImageElement>(
+        (resolve, reject) => {
+          const image = new Image();
+
+          image.onload = () =>
+            resolve(image);
+
+          image.onerror = () =>
+            reject(
+              new Error(
+                `Fotografiju "${file.name}" nije moguće obraditi.`
+              )
+            );
+
+          image.src = imageUrl;
+        }
+      );
+
+    let width = img.naturalWidth;
+    let height = img.naturalHeight;
+
+    /*
+     * Smanjujemo fotografiju samo ako je
+     * neka njena strana veća od 1500 px.
+     */
+    if (
+      width > MAX_DIMENSION ||
+      height > MAX_DIMENSION
+    ) {
+      const scale =
+        MAX_DIMENSION /
+        Math.max(width, height);
+
+      width = Math.round(
+        width * scale
+      );
+
+      height = Math.round(
+        height * scale
+      );
+    }
+
+    const canvas =
+      document.createElement(
+        "canvas"
+      );
+
+    canvas.width = width;
+    canvas.height = height;
+
+    const ctx =
+      canvas.getContext("2d");
+
+    if (!ctx) {
+      throw new Error(
+        "Fotografiju nije moguće obraditi."
+      );
+    }
+
+    /*
+     * Bijela pozadina je korisna ako
+     * korisnik pošalje PNG sa providnom
+     * pozadinom, jer JPEG nema
+     * transparentnost.
+     */
+    ctx.fillStyle = "#ffffff";
+
+    ctx.fillRect(
+      0,
+      0,
+      width,
+      height
+    );
+
+    ctx.drawImage(
+      img,
+      0,
+      0,
+      width,
+      height
+    );
+
+    const blob =
+      await new Promise<Blob | null>(
+        (resolve) => {
+          canvas.toBlob(
+            resolve,
+            "image/jpeg",
+            JPEG_QUALITY
+          );
+        }
+      );
+
+    if (!blob) {
+      throw new Error(
+        "Kompresija fotografije nije uspjela."
+      );
+    }
+
+    const baseName =
+      file.name.replace(
+        /\.[^/.]+$/,
+        ""
+      );
+
+    return new File(
+      [blob],
+      `${baseName}.jpg`,
+      {
+        type: "image/jpeg",
+      }
+    );
+  } finally {
+    URL.revokeObjectURL(
+      imageUrl
+    );
+  }
+}
 
 export default function TourImageUploader({
   images,
@@ -66,6 +216,7 @@ export default function TourImageUploader({
       setError(
         "Možete dodati najviše 5 fotografija."
       );
+
       return;
     }
 
@@ -82,12 +233,15 @@ export default function TourImageUploader({
     }
 
     /*
-     * Provjera svih fotografija
-     * prije nego što počnemo upload.
+     * Provjera svih fotografija prije
+     * nego što počnemo optimizaciju
+     * i upload.
      */
     for (const file of files) {
       if (
-        !file.type.startsWith("image/")
+        !file.type.startsWith(
+          "image/"
+        )
       ) {
         setError(
           `"${file.name}" nije fotografija.`
@@ -103,34 +257,74 @@ export default function TourImageUploader({
 
         return;
       }
+
+      /*
+       * Za sada podržavamo formate
+       * koje browser može pouzdano
+       * obraditi preko Canvas API-ja.
+       */
+      const supportedTypes = [
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+      ];
+
+      if (
+        !supportedTypes.includes(
+          file.type
+        )
+      ) {
+        setError(
+          `Format fotografije "${file.name}" trenutno nije podržan. Koristite JPG, PNG ili WebP.`
+        );
+
+        return;
+      }
     }
 
     try {
       setUploading(true);
-      setTotalFiles(files.length);
+
+      setTotalFiles(
+        files.length
+      );
+
       setCurrentFile(0);
 
       const uploaded: TourImageData[] =
         [];
 
       /*
-       * Fotografije šaljemo jednu po jednu.
+       * Fotografije obrađujemo i
+       * šaljemo jednu po jednu.
        */
       for (
         let i = 0;
         i < files.length;
         i++
       ) {
-        const file = files[i];
+        const file =
+          files[i];
 
-        setCurrentFile(i + 1);
+        setCurrentFile(
+          i + 1
+        );
+
+        /*
+         * Fotografija se prvo smanjuje
+         * i kompresuje u browseru.
+         */
+        const optimizedFile =
+          await optimizeImage(
+            file
+          );
 
         const formData =
           new FormData();
 
         formData.append(
           "file",
-          file
+          optimizedFile
         );
 
         const response =
@@ -145,7 +339,9 @@ export default function TourImageUploader({
         const data =
           await response
             .json()
-            .catch(() => ({}));
+            .catch(
+              () => ({})
+            );
 
         if (!response.ok) {
           throw new Error(
@@ -162,6 +358,7 @@ export default function TourImageUploader({
 
         uploaded.push({
           url: data.url,
+
           position:
             images.length +
             uploaded.length,
@@ -190,7 +387,9 @@ export default function TourImageUploader({
       );
     } finally {
       setUploading(false);
+
       setCurrentFile(0);
+
       setTotalFiles(0);
     }
   }
@@ -204,7 +403,9 @@ export default function TourImageUploader({
   function removeImage(
     index: number
   ) {
-    if (uploading) return;
+    if (uploading) {
+      return;
+    }
 
     const next = images
       .filter(
@@ -268,7 +469,14 @@ export default function TourImageUploader({
 
         <p className="mt-1 text-sm text-foreground/55">
           Dodajte do 5 fotografija.
-          Prva fotografija je naslovna.
+          Prva fotografija je
+          naslovna.
+        </p>
+
+        <p className="mt-1 text-xs text-foreground/45">
+          Fotografije se automatski
+          optimizuju za brže
+          učitavanje.
         </p>
       </div>
 
@@ -276,21 +484,29 @@ export default function TourImageUploader({
       {images.length > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {images.map(
-            (image, index) => (
+            (
+              image,
+              index
+            ) => (
               <div
-                key={image.url}
+                key={
+                  image.url
+                }
                 className="relative overflow-hidden rounded-xl border border-black/10 bg-black/5"
               >
                 <img
-                  src={image.url}
+                  src={
+                    image.url
+                  }
                   alt={`Fotografija ture ${
                     index + 1
                   }`}
-                  className="aspect-[4/3] w-full object-cover"
+                  className="aspect-[3/2] w-full object-cover"
                 />
 
                 {/* Naslovna */}
-                {index === 0 && (
+                {index ===
+                  0 && (
                   <div className="absolute left-2 top-2 rounded-full bg-brand px-2 py-1 text-xs font-medium text-white shadow">
                     Naslovna
                   </div>
@@ -314,7 +530,8 @@ export default function TourImageUploader({
                 </button>
 
                 {/* Postavi kao naslovnu */}
-                {index !== 0 && (
+                {index !==
+                  0 && (
                   <button
                     type="button"
                     disabled={
@@ -327,7 +544,8 @@ export default function TourImageUploader({
                     }
                     className="absolute bottom-2 left-2 right-2 rounded-lg bg-black/65 px-2 py-2 text-xs font-medium text-white disabled:opacity-40"
                   >
-                    Postavi kao naslovnu
+                    Postavi kao
+                    naslovnu
                   </button>
                 )}
               </div>
@@ -343,7 +561,7 @@ export default function TourImageUploader({
           <input
             ref={inputRef}
             type="file"
-            accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+            accept="image/jpeg,image/png,image/webp"
             multiple
             className="hidden"
             disabled={
@@ -365,7 +583,7 @@ export default function TourImageUploader({
             className="w-full rounded-xl border-2 border-dashed border-brand/35 bg-brand-light px-4 py-5 text-center text-sm font-medium text-brand-dark disabled:opacity-50"
           >
             {uploading
-              ? `Šaljem fotografiju ${currentFile}/${totalFiles}...`
+              ? `Obrađujem i šaljem fotografiju ${currentFile}/${totalFiles}...`
               : "📷 + Dodaj fotografije"}
           </button>
         </>
@@ -376,7 +594,8 @@ export default function TourImageUploader({
         <div className="rounded-xl bg-brand-light p-3">
           <div className="mb-2 flex justify-between text-xs text-brand-dark">
             <span>
-              Upload fotografija
+              Optimizacija i
+              upload
             </span>
 
             <span>
@@ -406,7 +625,9 @@ export default function TourImageUploader({
 
       <div className="flex justify-between text-xs text-foreground/45">
         <span>
-          JPG, PNG, WebP, HEIC · max 4 MB
+          JPG, PNG, WebP · max
+          4 MB · automatska
+          optimizacija
         </span>
 
         <span>
