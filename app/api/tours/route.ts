@@ -336,9 +336,20 @@ export async function GET(
         },
       },
 
-      orderBy: {
-        createdAt: "desc",
-      },
+  orderBy: [
+  {
+    featured: "desc",
+  },
+  {
+    featuredOrder: {
+      sort: "asc",
+      nulls: "last",
+    },
+  },
+  {
+    createdAt: "desc",
+  },
+],
     });
 
   /*
