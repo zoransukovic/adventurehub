@@ -85,6 +85,7 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [editingBookingId, setEditingBookingId] = useState<string | null>(null);
   const [editParticipants, setEditParticipants] = useState<{ fullName: string; age: number }[]>([]);
+  const [editParticipantCount, setEditParticipantCount] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(null);
@@ -140,21 +141,82 @@ export default function ProfilePage() {
     setEditingBookingId(booking.id);
     setEditError(null);
     setCancelError(null);
+
     const existing = booking.participantsInfo ?? [];
-    setEditParticipants(
-      existing.length
-        ? existing.map(p => ({ fullName: p.fullName, age: p.age }))
-        : Array.from({ length: booking.participants }, () => ({ fullName: "", age: 18 }))
+
+    const initialParticipants =
+      existing.length > 0
+        ? existing.map((p) => ({
+            fullName: p.fullName,
+            age: p.age,
+          }))
+        : Array.from(
+            { length: booking.participants },
+            () => ({
+              fullName: "",
+              age: 18,
+            })
+          );
+
+    // Ako API iz nekog razloga vrati manje participantsInfo zapisa
+    // nego što booking.participants kaže, dopuni samo nedostajuće redove.
+    while (initialParticipants.length < booking.participants) {
+      initialParticipants.push({
+        fullName: "",
+        age: 18,
+      });
+    }
+
+    setEditParticipants(initialParticipants);
+    setEditParticipantCount(
+      booking.participants.toString()
     );
   }
 
-  function changeParticipantCount(count: number) {
-    const safeCount = Math.max(1, count);
-    setEditParticipants(current =>
-      safeCount > current.length
-        ? [...current, ...Array.from({ length: safeCount - current.length }, () => ({ fullName: "", age: 18 }))]
-        : current.slice(0, safeCount)
-    );
+  function changeParticipantCount(
+    rawValue: string,
+    maxCount: number
+  ) {
+    // Dozvoli korisniku da privremeno obriše broj dok upisuje novi.
+    setEditParticipantCount(rawValue);
+
+    if (rawValue === "") {
+      return;
+    }
+
+    const count = Number(rawValue);
+
+    if (
+      !Number.isInteger(count) ||
+      count < 1 ||
+      count > maxCount
+    ) {
+      return;
+    }
+
+    setEditParticipants((current) => {
+      if (count > current.length) {
+        return [
+          ...current,
+          ...Array.from(
+            {
+              length:
+                count - current.length,
+            },
+            () => ({
+              fullName: "",
+              age: 18,
+            })
+          ),
+        ];
+      }
+
+      if (count < current.length) {
+        return current.slice(0, count);
+      }
+
+      return current;
+    });
   }
 
   function updateParticipant(index: number, field: "fullName" | "age", value: string | number) {
@@ -165,6 +227,24 @@ export default function ProfilePage() {
 
   async function saveBookingChanges(booking: Booking) {
     setEditError(null);
+
+    const requestedCount = Number(editParticipantCount);
+    const maxCount =
+      booking.departure.spotsLeft +
+      booking.participants;
+
+    if (
+      !Number.isInteger(requestedCount) ||
+      requestedCount < 1 ||
+      requestedCount > maxCount ||
+      requestedCount !== editParticipants.length
+    ) {
+      setEditError(
+        `Broj učesnika mora biti između 1 i ${maxCount}.`
+      );
+      return;
+    }
+
     for (let i = 0; i < editParticipants.length; i++) {
       if (editParticipants[i].fullName.trim().length < 3) {
         setEditError(`Unesite ime i prezime za učesnika ${i + 1}.`);
@@ -198,6 +278,7 @@ export default function ProfilePage() {
       ));
       setEditingBookingId(null);
       setEditParticipants([]);
+      setEditParticipantCount("");
     } catch (error) {
       console.error("Booking update error:", error);
       setEditError("Došlo je do greške prilikom izmjene rezervacije.");
@@ -249,6 +330,7 @@ export default function ProfilePage() {
       if (editingBookingId === booking.id) {
         setEditingBookingId(null);
         setEditParticipants([]);
+        setEditParticipantCount("");
         setEditError(null);
       }
     } catch (error) {
@@ -415,8 +497,13 @@ export default function ProfilePage() {
                       <label className="mb-1 block text-xs font-medium text-foreground/60">Broj učesnika</label>
                       <input
                         type="number" min={1} max={availableForThisBooking}
-                        value={editParticipants.length}
-                        onChange={e => changeParticipantCount(Number(e.target.value))}
+                        value={editParticipantCount}
+                        onChange={(e) =>
+                          changeParticipantCount(
+                            e.target.value,
+                            availableForThisBooking
+                          )
+                        }
                         className="w-full rounded-lg border border-black/10 bg-white px-3 py-2.5 text-sm"
                       />
                       <p className="mt-1 text-[11px] text-foreground/45">
@@ -456,7 +543,12 @@ export default function ProfilePage() {
                       <div className="mt-3 flex gap-2">
                         <button
                           type="button" disabled={editSaving}
-                          onClick={() => { setEditingBookingId(null); setEditParticipants([]); setEditError(null); }}
+                          onClick={() => {
+                            setEditingBookingId(null);
+                            setEditParticipants([]);
+                            setEditParticipantCount("");
+                            setEditError(null);
+                          }}
                           className="flex-1 rounded-lg border border-black/10 py-2.5 text-sm text-foreground/60 disabled:opacity-50"
                         >
                           Odustani
