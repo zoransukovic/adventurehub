@@ -230,42 +230,32 @@ export default function DashboardPage() {
                   href={`/tours/${t.id}`}
                   className="block overflow-hidden rounded-2xl border border-black/8 bg-white shadow-sm transition hover:shadow-md"
                 >
-                  {/* FOTOGRAFIJA */}
-                  <div className="relative h-48 overflow-hidden bg-brand-light">
-                    {coverImage ? (
-                      <img
-                        src={
-                          coverImage
-                        }
-                        alt={
-                          t.title
-                        }
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      /*
-                       * Fallback za stare ture
-                       * koje nemaju fotografiju.
-                       */
-                      <div className="flex h-full items-center justify-center">
-                        <div className="text-center">
-                          <div className="text-5xl">
-                            {
-                              icon
-                            }
-                          </div>
+                  {/* FOTOGRAFIJA — odnos 3:2 */}
+<div className="relative aspect-[3/2] w-full overflow-hidden bg-brand-light">
+  {coverImage ? (
+    <img
+      src={coverImage}
+      alt={t.title}
+      className="h-full w-full object-cover"
+    />
+  ) : (
+    /*
+     * Fallback za stare ture
+     * koje nemaju fotografiju.
+     */
+    <div className="flex h-full items-center justify-center">
+      <div className="text-center">
+        <div className="text-5xl">
+          {icon}
+        </div>
 
-                          <div className="mt-2 text-sm font-medium text-brand-dark">
-                            {
-                              t
-                                .activityType
-                                .name
-                            }
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
+        <div className="mt-2 text-sm font-medium text-brand-dark">
+          {t.activityType.name}
+        </div>
+      </div>
+    </div>
+  )}
+</div>
                     {/* OZNAKA AKTIVNOSTI */}
                     <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/65 px-3 py-1.5 text-sm font-medium text-white shadow">
                       <span>
