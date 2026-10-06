@@ -230,7 +230,7 @@ export default function DashboardPage() {
                   href={`/tours/${t.id}`}
                   className="block overflow-hidden rounded-2xl border border-black/8 bg-white shadow-sm transition hover:shadow-md"
                 >
-                  {/* FOTOGRAFIJA — odnos 3:2 */}
+               {/* FOTOGRAFIJA — odnos 3:2 */}
 <div className="relative aspect-[3/2] w-full overflow-hidden bg-brand-light">
   {coverImage ? (
     <img
@@ -239,10 +239,6 @@ export default function DashboardPage() {
       className="h-full w-full object-cover"
     />
   ) : (
-    /*
-     * Fallback za stare ture
-     * koje nemaju fotografiju.
-     */
     <div className="flex h-full items-center justify-center">
       <div className="text-center">
         <div className="text-5xl">
@@ -256,23 +252,8 @@ export default function DashboardPage() {
     </div>
   )}
 </div>
-                    {/* OZNAKA AKTIVNOSTI */}
-                    <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/65 px-3 py-1.5 text-sm font-medium text-white shadow">
-                      <span>
-                        {icon}
-                      </span>
 
-                      <span>
-                        {
-                          t
-                            .activityType
-                            .name
-                        }
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* PODACI TURE */}
+{/* PODACI TURE */}
                   <div className="p-4">
                     <div className="text-lg font-medium text-foreground">
                       {t.title}
