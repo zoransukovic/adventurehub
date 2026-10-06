@@ -193,6 +193,40 @@ export default function TourPage() {
     setShowRoute,
   ] = useState(false);
 
+const [user, setUser] = useState<{
+  id: string;
+  role: string;
+} | null>(null);
+
+const [selectedDepartureId, setSelectedDepartureId] =
+  useState("");
+
+const [participantsInput, setParticipantsInput] =
+  useState("1");
+
+const [participantsInfo, setParticipantsInfo] =
+  useState<
+    {
+      fullName: string;
+      age: string;
+    }[]
+  >([
+    {
+      fullName: "",
+      age: "",
+    },
+  ]);
+
+const [booking, setBooking] = useState<{
+  loading: boolean;
+  done: boolean;
+  error: string;
+}>({
+  loading: false,
+  done: false,
+  error: "",
+});
+  
   /*
    * =======================================================
    * UČITAVANJE TURE
@@ -344,6 +378,241 @@ export default function TourPage() {
     if (
       images.length <= 1
     ) {
+      
+      const selectedDeparture =
+  tour?.departures.find(
+    (d) => d.id === selectedDepartureId
+  );
+
+const maxAvailable =
+  selectedDeparture?.spotsLeft ??
+  tour?.maxParticipants ??
+  1;
+
+function resizeParticipants(count: number) {
+  setParticipantsInfo((current) => {
+    const next = [...current];
+
+    while (next.length < count) {
+      next.push({
+        fullName: "",
+        age: "",
+      });
+    }
+
+    return next.slice(0, count);
+  });
+}
+
+function changeParticipantCount(value: string) {
+  // Dozvoli da polje bude prazno dok korisnik kuca
+  if (value === "") {
+    setParticipantsInput("");
+    return;
+  }
+
+  // Samo cijeli brojevi
+  if (!/^\d+$/.test(value)) {
+    return;
+  }
+
+  const count = Number(value);
+
+  if (count > maxAvailable) {
+    setParticipantsInput(String(maxAvailable));
+    resizeParticipants(maxAvailable);
+    return;
+  }
+
+  setParticipantsInput(value);
+
+  if (count >= 1) {
+    resizeParticipants(count);
+  }
+}
+
+function participantBlur() {
+  const count = Number(participantsInput);
+
+  if (
+    participantsInput === "" ||
+    !Number.isInteger(count) ||
+    count < 1
+  ) {
+    setParticipantsInput("1");
+    resizeParticipants(1);
+    return;
+  }
+
+  if (count > maxAvailable) {
+    setParticipantsInput(String(maxAvailable));
+    resizeParticipants(maxAvailable);
+  }
+}
+
+function updateParticipant(
+  index: number,
+  field: "fullName" | "age",
+  value: string
+) {
+  setParticipantsInfo((current) =>
+    current.map((person, i) =>
+      i === index
+        ? {
+            ...person,
+            [field]: value,
+          }
+        : person
+    )
+  );
+}
+
+async function bookTour() {
+  if (!selectedDepartureId) {
+    setBooking({
+      loading: false,
+      done: false,
+      error: "Izaberite termin polaska.",
+    });
+    return;
+  }
+
+  const count = Number(participantsInput);
+
+  if (
+    !Number.isInteger(count) ||
+    count < 1
+  ) {
+    setBooking({
+      loading: false,
+      done: false,
+      error: "Unesite ispravan broj učesnika.",
+    });
+    return;
+  }
+
+  if (count > maxAvailable) {
+    setBooking({
+      loading: false,
+      done: false,
+      error: `Dostupno je najviše ${maxAvailable} mjesta.`,
+    });
+    return;
+  }
+
+  for (let i = 0; i < count; i++) {
+    const person = participantsInfo[i];
+
+    if (
+      !person ||
+      person.fullName.trim().length < 3
+    ) {
+      setBooking({
+        loading: false,
+        done: false,
+        error: `Unesite ime i prezime za učesnika ${i + 1}.`,
+      });
+      return;
+    }
+
+    const age = Number(person.age);
+
+    if (
+      !Number.isInteger(age) ||
+      age < 1 ||
+      age > 120
+    ) {
+      setBooking({
+        loading: false,
+        done: false,
+        error: `Unesite ispravnu starost za učesnika ${i + 1}.`,
+      });
+      return;
+    }
+  }
+
+  setBooking({
+    loading: true,
+    done: false,
+    error: "",
+  });
+
+  try {
+    const response = await fetch("/api/bookings", {
+      method: "POST",
+
+      headers: {
+        "Content-Type": "application/json",
+      },
+
+      body: JSON.stringify({
+        tourId: id,
+        departureId: selectedDepartureId,
+        participants: count,
+
+        participantsInfo: participantsInfo
+          .slice(0, count)
+          .map((person) => ({
+            fullName: person.fullName.trim(),
+            age: Number(person.age),
+          })),
+      }),
+    });
+
+    const data = await response
+      .json()
+      .catch(() => ({}));
+
+    if (response.status === 401) {
+      router.push("/login");
+      return;
+    }
+
+    if (!response.ok) {
+      setBooking({
+        loading: false,
+        done: false,
+        error:
+          data.error ||
+          "Rezervacija nije uspjela.",
+      });
+      return;
+    }
+
+    setBooking({
+      loading: false,
+      done: true,
+      error: "",
+    });
+
+    // Smanji broj slobodnih mjesta na ekranu
+    setTour((current) => {
+      if (!current) return current;
+
+      return {
+        ...current,
+
+        departures: current.departures.map(
+          (departure) =>
+            departure.id === selectedDepartureId
+              ? {
+                  ...departure,
+                  spotsLeft:
+                    departure.spotsLeft - count,
+                }
+              : departure
+        ),
+      };
+    });
+  } catch {
+    setBooking({
+      loading: false,
+      done: false,
+      error:
+        "Došlo je do greške. Pokušajte ponovo.",
+    });
+  }
+}
       return;
     }
 
@@ -814,67 +1083,241 @@ export default function TourPage() {
           </section>
 
           {/* ============================================= */}
-          {/* TERMINI */}
-          {/* ============================================= */}
+{/* REZERVACIJA */}
+{/* ============================================= */}
 
-          <section className="mt-7">
-            <h2 className="text-lg font-semibold">
-              Dostupni termini
-            </h2>
+<section className="mt-7">
+  <h2 className="text-lg font-semibold">
+    Rezerviši turu
+  </h2>
 
-            {tour.departures
-              .length >
-            0 ? (
-              <div className="mt-3 space-y-3">
-                {tour.departures.map(
-                  (
-                    departure
-                  ) => (
-                    <div
-                      key={
-                        departure.id
-                      }
-                      className="flex flex-col gap-2 rounded-xl border border-black/10 p-4 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                      <div>
-                        <div className="font-medium">
-                          {formatDate(
-                            departure.startsAt
-                          )}
-                        </div>
+  {tour.departures.length === 0 ? (
+    <div className="mt-3 rounded-xl bg-black/[0.03] p-4 text-sm text-foreground/55">
+      Trenutno nema dostupnih budućih termina.
+    </div>
+  ) : (
+    <div className="mt-3 rounded-2xl border border-black/10 p-4">
 
-                        {departure.bookingDeadline && (
-                          <div className="mt-1 text-xs text-foreground/50">
-                            Rezervacije
-                            do:{" "}
-                            {formatDate(
-                              departure.bookingDeadline
-                            )}
-                          </div>
-                        )}
-                      </div>
+      {/* TERMIN */}
 
-                      <div className="text-sm">
-                        <strong>
-                          {
-                            departure.spotsLeft
-                          }
-                        </strong>{" "}
-                        slobodnih
-                        mjesta
-                      </div>
+      <label className="mb-1 block text-xs text-foreground/60">
+        Termin polaska
+      </label>
+
+      <select
+        value={selectedDepartureId}
+        onChange={(e) => {
+          const departureId = e.target.value;
+
+          setSelectedDepartureId(departureId);
+
+          setBooking({
+            loading: false,
+            done: false,
+            error: "",
+          });
+
+          const departure =
+            tour.departures.find(
+              (d) => d.id === departureId
+            );
+
+          if (departure) {
+            const current =
+              Number(participantsInput);
+
+            if (
+              Number.isInteger(current) &&
+              current > departure.spotsLeft
+            ) {
+              const next = Math.max(
+                1,
+                departure.spotsLeft
+              );
+
+              setParticipantsInput(
+                String(next)
+              );
+
+              resizeParticipants(next);
+            }
+          }
+        }}
+        className="w-full rounded-xl border border-black/10 bg-white px-3 py-3 text-sm"
+      >
+        <option value="">
+          Izaberite termin
+        </option>
+
+        {tour.departures.map((departure) => (
+          <option
+            key={departure.id}
+            value={departure.id}
+            disabled={departure.spotsLeft < 1}
+          >
+            {formatDate(departure.startsAt)}
+            {" · "}
+            {departure.spotsLeft} slobodnih mjesta
+          </option>
+        ))}
+      </select>
+
+      {/* BROJ UČESNIKA */}
+
+      <div className="mt-4">
+        <label className="mb-1 block text-xs text-foreground/60">
+          Broj učesnika
+        </label>
+
+        <input
+          type="number"
+          inputMode="numeric"
+          min={1}
+          max={maxAvailable}
+          value={participantsInput}
+          onChange={(e) =>
+            changeParticipantCount(
+              e.target.value
+            )
+          }
+          onBlur={participantBlur}
+          className="w-full rounded-xl border border-black/10 px-3 py-3 text-sm outline-none focus:border-brand"
+        />
+
+        {selectedDeparture && (
+          <p className="mt-1 text-xs text-foreground/50">
+            Dostupno:{" "}
+            {selectedDeparture.spotsLeft} mjesta
+          </p>
+        )}
+      </div>
+
+      {/* PODACI UČESNIKA */}
+
+      {participantsInput !== "" &&
+        Number(participantsInput) >= 1 && (
+          <div className="mt-5">
+            <h3 className="font-medium">
+              Podaci o učesnicima
+            </h3>
+
+            <p className="mt-1 text-xs text-foreground/50">
+              Unesite ime i prezime i starost
+              za svaku osobu.
+            </p>
+
+            <div className="mt-3 space-y-3">
+              {participantsInfo
+                .slice(
+                  0,
+                  Number(participantsInput)
+                )
+                .map((person, index) => (
+                  <div
+                    key={index}
+                    className="rounded-xl border border-black/10 p-3"
+                  >
+                    <div className="mb-2 text-sm font-medium text-brand-dark">
+                      Učesnik {index + 1}
                     </div>
-                  )
-                )}
-              </div>
-            ) : (
-              <div className="mt-3 rounded-xl bg-black/[0.03] p-4 text-sm text-foreground/55">
-                Trenutno nema
-                dostupnih budućih
-                termina.
-              </div>
-            )}
-          </section>
+
+                    <label className="mb-1 block text-xs text-foreground/60">
+                      Ime i prezime
+                    </label>
+
+                    <input
+                      type="text"
+                      value={person.fullName}
+                      onChange={(e) =>
+                        updateParticipant(
+                          index,
+                          "fullName",
+                          e.target.value
+                        )
+                      }
+                      placeholder="npr. Marko Marković"
+                      className="w-full rounded-xl border border-black/10 px-3 py-2.5 text-sm outline-none focus:border-brand"
+                    />
+
+                    <label className="mb-1 mt-3 block text-xs text-foreground/60">
+                      Starost
+                    </label>
+
+                    <input
+                      type="number"
+                      min={1}
+                      max={120}
+                      value={person.age}
+                      onChange={(e) =>
+                        updateParticipant(
+                          index,
+                          "age",
+                          e.target.value
+                        )
+                      }
+                      placeholder="npr. 35"
+                      className="w-full rounded-xl border border-black/10 px-3 py-2.5 text-sm outline-none focus:border-brand"
+                    />
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+
+      {/* UKUPNO */}
+
+      <div className="mt-5 flex items-center justify-between border-t border-black/10 pt-4">
+        <span className="text-sm text-foreground/60">
+          Ukupno:
+        </span>
+
+        <span className="text-xl font-bold text-brand-dark">
+          €
+          {(
+            tour.pricePerPerson *
+            (Number(participantsInput) || 0)
+          ).toFixed(2)}
+        </span>
+      </div>
+
+      {/* GREŠKA */}
+
+      {booking.error && (
+        <div className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-600">
+          {booking.error}
+        </div>
+      )}
+
+      {/* USPJEŠNA REZERVACIJA */}
+
+      {booking.done ? (
+        <div className="mt-3 rounded-xl bg-brand-light p-4 text-sm font-medium text-brand-dark">
+          ✓ Rezervacija je uspješno poslata!
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={bookTour}
+          disabled={
+            booking.loading ||
+            !selectedDepartureId ||
+            participantsInput === "" ||
+            Number(participantsInput) < 1 ||
+            (selectedDeparture?.spotsLeft ?? 0) < 1
+          }
+          className="mt-4 w-full rounded-xl bg-brand px-4 py-3 font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {booking.loading
+            ? "Rezervisanje..."
+            : `Rezerviši za €${(
+                tour.pricePerPerson *
+                (Number(participantsInput) || 0)
+              ).toFixed(2)}`}
+        </button>
+      )}
+    </div>
+  )}
+</section>
 
           {/* ============================================= */}
           {/* RUTA */}
