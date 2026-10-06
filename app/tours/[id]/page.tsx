@@ -9,6 +9,21 @@ import {
   useParams,
   useRouter,
 } from "next/navigation";
+import dynamic from "next/dynamic";
+const TourDetailMap = dynamic(
+  () =>
+    import(
+      "@/app/components/TourDetailMap"
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-full items-center justify-center bg-black/[0.03] text-sm text-foreground/50">
+        Učitavanje mape...
+      </div>
+    ),
+  }
+);
 
 type TourImage = {
   id: string;
@@ -765,6 +780,18 @@ const [booking, setBooking] = useState<{
           {/* OPIS */}
 
           <section className="mt-4">
+            <div className="mb-4">
+  <h2 className="mb-3 text-base font-semibold">
+    Mapa rute
+  </h2>
+
+  <div className="h-[320px] overflow-hidden rounded-2xl border border-black/10 sm:h-[400px]">
+    <TourDetailMap
+      route={tour.route}
+      title={tour.title}
+    />
+  </div>
+</div>
             <h2 className="text-base font-semibold">
               Opis ture
             </h2>
