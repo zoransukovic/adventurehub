@@ -117,12 +117,25 @@ model Tour {
   meetingPoint    String?
   includesItems   String[]        @default([])
   active          Boolean         @default(true)
+
+  // ISTAKNUTE TURE
+  // Administrator može označiti turu
+  // kao istaknutu.
+  featured        Boolean         @default(false)
+
+  // Redosled istaknutih tura.
+  // 1 = prva, 2 = druga, 3 = treća...
+  featuredOrder   Int?
+
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
+
   guideId         String
   guide           User            @relation("GuideTours", fields: [guideId], references: [id])
+
   activityTypeId  String
   activityType    ActivityType    @relation(fields: [activityTypeId], references: [id])
+
   route           Route?
   departures      TourDeparture[]
   bookings        Booking[]
@@ -132,6 +145,11 @@ model Tour {
 
   @@index([activityTypeId])
   @@index([guideId])
+
+  // Indeks za brzo sortiranje
+  // istaknutih tura.
+  @@index([featured, featuredOrder])
+
   @@map("tours")
 }
 
@@ -151,13 +169,13 @@ model TourImage {
 }
 
 model TourDeparture {
-  id          String   @id @default(cuid())
-  tourId      String
-  tour        Tour     @relation(fields: [tourId], references: [id], onDelete: Cascade)
-  startsAt    DateTime
+  id              String   @id @default(cuid())
+  tourId          String
+  tour            Tour     @relation(fields: [tourId], references: [id], onDelete: Cascade)
+  startsAt        DateTime
   bookingDeadline DateTime?
-  spotsLeft   Int
-  createdAt   DateTime @default(now())
+  spotsLeft       Int
+  createdAt       DateTime @default(now())
 
   bookings         Booking[]
   trackingSessions TrackingSession[]
@@ -209,12 +227,12 @@ model Booking {
 }
 
 model BookingParticipant {
-  id        String   @id @default(cuid())
+  id        String  @id @default(cuid())
   bookingId String
-  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
-  fullName  String
-  age       Int
+  fullName String
+  age      Int
 
   createdAt DateTime @default(now())
 
@@ -223,15 +241,15 @@ model BookingParticipant {
 }
 
 model TrackingSession {
-  id                String          @id @default(cuid())
+  id                String         @id @default(cuid())
   userId            String
-  user              User            @relation(fields: [userId], references: [id])
+  user              User           @relation(fields: [userId], references: [id])
   departureId       String
-  departure         TourDeparture   @relation(fields: [departureId], references: [id])
-  status            TrackingStatus  @default(ACTIVE)
-  startedAt         DateTime        @default(now())
+  departure         TourDeparture  @relation(fields: [departureId], references: [id])
+  status            TrackingStatus @default(ACTIVE)
+  startedAt         DateTime       @default(now())
   finishedAt        DateTime?
-  distanceCoveredKm Float           @default(0)
+  distanceCoveredKm Float          @default(0)
   currentLat        Float?
   currentLng        Float?
   currentSpeedKmh   Float?
@@ -243,14 +261,14 @@ model TrackingSession {
 }
 
 model TrackingPoint {
-  id         String          @id @default(cuid())
-  sessionId  String
-  session    TrackingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  lat        Float
-  lng        Float
-  elevation  Int?
-  speedKmh   Float?
-  recordedAt DateTime        @default(now())
+  id        String          @id @default(cuid())
+  sessionId String
+  session   TrackingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  lat       Float
+  lng       Float
+  elevation Int?
+  speedKmh  Float?
+  recordedAt DateTime       @default(now())
 
   @@index([sessionId])
   @@map("tracking_points")
