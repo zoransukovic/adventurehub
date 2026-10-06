@@ -93,6 +93,9 @@ export default function AdminPage() {
   const [orderDrafts, setOrderDrafts] =
     useState<Record<string, string>>({});
 
+  const [savedOrders, setSavedOrders] =
+  useState<Record<string, string>>({});
+
   const [tab, setTab] =
     useState<Tab>("activities");
 
@@ -183,6 +186,8 @@ export default function AdminPage() {
       });
 
       setOrderDrafts(drafts);
+
+      setSavedOrders(drafts);
 
       setStats((current) => ({
         users: current?.users ?? 0,
@@ -472,45 +477,66 @@ export default function AdminPage() {
     }
   }
 
-  async function saveFeaturedOrder(
-    tour: AdminTour
-  ) {
-    const raw =
-      orderDrafts[tour.id] ?? "";
+async function saveFeaturedOrder(
+  tour: AdminTour
+) {
+  const raw =
+    orderDrafts[tour.id] ?? "";
 
-    if (!raw.trim()) {
-      setTourError(
-        "Unesi redosled istaknute ture."
-      );
-      return;
-    }
-
-    const order = Number(raw);
-
-    if (
-      !Number.isInteger(order) ||
-      order < 1
-    ) {
-      setTourError(
-        "Redosled mora biti cijeli broj: 1, 2, 3..."
-      );
-
-      return;
-    }
-
-    const success =
-      await patchTour(
-        tour.id,
-        {
-          featured: true,
-          featuredOrder: order,
-        }
-      );
-
-    if (success) {
-      await loadTours();
-    }
+  if (!raw.trim()) {
+    setTourError(
+      "Unesi redosled istaknute ture."
+    );
+    return;
   }
+
+  const order = Number(raw);
+
+  if (
+    !Number.isInteger(order) ||
+    order < 1
+  ) {
+    setTourError(
+      "Redosled mora biti cijeli broj: 1, 2, 3..."
+    );
+    return;
+  }
+
+  const duplicate = tours.find(
+    (item) =>
+      item.id !== tour.id &&
+      item.featured &&
+      item.featuredOrder === order
+  );
+
+  if (duplicate) {
+    setTourError(
+      `Redosled ${order} već koristi tura "${duplicate.title}".`
+    );
+    return;
+  }
+
+  const success =
+    await patchTour(
+      tour.id,
+      {
+        featured: true,
+        featuredOrder: order,
+      }
+    );
+
+  if (success) {
+    setSavedOrders(
+      (current) => ({
+        ...current,
+        [tour.id]:
+          order.toString(),
+      })
+    );
+
+    setTourError(null);
+  }
+}
 
   const STATUS_STYLE: Record<
     string,
