@@ -193,10 +193,6 @@ export default function TourPage() {
     setShowRoute,
   ] = useState(false);
 
-const [user, setUser] = useState<{
-  id: string;
-  role: string;
-} | null>(null);
 
 const [selectedDepartureId, setSelectedDepartureId] =
   useState("");
@@ -375,254 +371,159 @@ const [booking, setBooking] = useState<{
   }
 
   function nextImage() {
-    if (
-      images.length <= 1
-    ) {
-      
-      const selectedDeparture =
-  tour?.departures.find(
+    if (images.length <= 1) {
+      return;
+    }
+
+    setCurrentImage((current) =>
+      current === images.length - 1 ? 0 : current + 1
+    );
+  }
+
+  const selectedDeparture = tour.departures.find(
     (d) => d.id === selectedDepartureId
   );
 
-const maxAvailable =
-  selectedDeparture?.spotsLeft ??
-  tour?.maxParticipants ??
-  1;
+  const maxAvailable =
+    selectedDeparture?.spotsLeft ?? tour.maxParticipants ?? 1;
 
-function resizeParticipants(count: number) {
-  setParticipantsInfo((current) => {
-    const next = [...current];
+  function resizeParticipants(count: number) {
+    setParticipantsInfo((current) => {
+      const next = [...current];
 
-    while (next.length < count) {
-      next.push({
-        fullName: "",
-        age: "",
-      });
-    }
+      while (next.length < count) {
+        next.push({ fullName: "", age: "" });
+      }
 
-    return next.slice(0, count);
-  });
-}
-
-function changeParticipantCount(value: string) {
-  // Dozvoli da polje bude prazno dok korisnik kuca
-  if (value === "") {
-    setParticipantsInput("");
-    return;
-  }
-
-  // Samo cijeli brojevi
-  if (!/^\d+$/.test(value)) {
-    return;
-  }
-
-  const count = Number(value);
-
-  if (count > maxAvailable) {
-    setParticipantsInput(String(maxAvailable));
-    resizeParticipants(maxAvailable);
-    return;
-  }
-
-  setParticipantsInput(value);
-
-  if (count >= 1) {
-    resizeParticipants(count);
-  }
-}
-
-function participantBlur() {
-  const count = Number(participantsInput);
-
-  if (
-    participantsInput === "" ||
-    !Number.isInteger(count) ||
-    count < 1
-  ) {
-    setParticipantsInput("1");
-    resizeParticipants(1);
-    return;
-  }
-
-  if (count > maxAvailable) {
-    setParticipantsInput(String(maxAvailable));
-    resizeParticipants(maxAvailable);
-  }
-}
-
-function updateParticipant(
-  index: number,
-  field: "fullName" | "age",
-  value: string
-) {
-  setParticipantsInfo((current) =>
-    current.map((person, i) =>
-      i === index
-        ? {
-            ...person,
-            [field]: value,
-          }
-        : person
-    )
-  );
-}
-
-async function bookTour() {
-  if (!selectedDepartureId) {
-    setBooking({
-      loading: false,
-      done: false,
-      error: "Izaberite termin polaska.",
+      return next.slice(0, count);
     });
-    return;
   }
 
-  const count = Number(participantsInput);
-
-  if (
-    !Number.isInteger(count) ||
-    count < 1
-  ) {
-    setBooking({
-      loading: false,
-      done: false,
-      error: "Unesite ispravan broj učesnika.",
-    });
-    return;
-  }
-
-  if (count > maxAvailable) {
-    setBooking({
-      loading: false,
-      done: false,
-      error: `Dostupno je najviše ${maxAvailable} mjesta.`,
-    });
-    return;
-  }
-
-  for (let i = 0; i < count; i++) {
-    const person = participantsInfo[i];
-
-    if (
-      !person ||
-      person.fullName.trim().length < 3
-    ) {
-      setBooking({
-        loading: false,
-        done: false,
-        error: `Unesite ime i prezime za učesnika ${i + 1}.`,
-      });
+  function changeParticipantCount(value: string) {
+    if (value === "") {
+      setParticipantsInput("");
       return;
     }
 
-    const age = Number(person.age);
+    if (!/^\d+$/.test(value)) return;
 
-    if (
-      !Number.isInteger(age) ||
-      age < 1 ||
-      age > 120
-    ) {
-      setBooking({
-        loading: false,
-        done: false,
-        error: `Unesite ispravnu starost za učesnika ${i + 1}.`,
-      });
+    const count = Number(value);
+
+    if (count > maxAvailable) {
+      setParticipantsInput(String(maxAvailable));
+      resizeParticipants(maxAvailable);
       return;
+    }
+
+    setParticipantsInput(value);
+    if (count >= 1) resizeParticipants(count);
+  }
+
+  function participantBlur() {
+    const count = Number(participantsInput);
+
+    if (participantsInput === "" || !Number.isInteger(count) || count < 1) {
+      setParticipantsInput("1");
+      resizeParticipants(1);
+      return;
+    }
+
+    if (count > maxAvailable) {
+      setParticipantsInput(String(maxAvailable));
+      resizeParticipants(maxAvailable);
     }
   }
 
-  setBooking({
-    loading: true,
-    done: false,
-    error: "",
-  });
+  function updateParticipant(
+    index: number,
+    field: "fullName" | "age",
+    value: string
+  ) {
+    setParticipantsInfo((current) =>
+      current.map((person, i) =>
+        i === index ? { ...person, [field]: value } : person
+      )
+    );
+  }
 
-  try {
-    const response = await fetch("/api/bookings", {
-      method: "POST",
+  async function bookTour() {
+    if (!selectedDepartureId) {
+      setBooking({ loading: false, done: false, error: "Izaberite termin polaska." });
+      return;
+    }
 
-      headers: {
-        "Content-Type": "application/json",
-      },
+    const count = Number(participantsInput);
 
-      body: JSON.stringify({
-        tourId: id,
-        departureId: selectedDepartureId,
-        participants: count,
+    if (!Number.isInteger(count) || count < 1) {
+      setBooking({ loading: false, done: false, error: "Unesite ispravan broj učesnika." });
+      return;
+    }
 
-        participantsInfo: participantsInfo
-          .slice(0, count)
-          .map((person) => ({
+    if (count > maxAvailable) {
+      setBooking({ loading: false, done: false, error: `Dostupno je najviše ${maxAvailable} mjesta.` });
+      return;
+    }
+
+    for (let i = 0; i < count; i++) {
+      const person = participantsInfo[i];
+
+      if (!person || person.fullName.trim().length < 3) {
+        setBooking({ loading: false, done: false, error: `Unesite ime i prezime za učesnika ${i + 1}.` });
+        return;
+      }
+
+      const age = Number(person.age);
+      if (!Number.isInteger(age) || age < 1 || age > 120) {
+        setBooking({ loading: false, done: false, error: `Unesite ispravnu starost za učesnika ${i + 1}.` });
+        return;
+      }
+    }
+
+    setBooking({ loading: true, done: false, error: "" });
+
+    try {
+      const response = await fetch("/api/bookings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tourId: id,
+          departureId: selectedDepartureId,
+          participants: count,
+          participantsInfo: participantsInfo.slice(0, count).map((person) => ({
             fullName: person.fullName.trim(),
             age: Number(person.age),
           })),
-      }),
-    });
-
-    const data = await response
-      .json()
-      .catch(() => ({}));
-
-    if (response.status === 401) {
-      router.push("/login");
-      return;
-    }
-
-    if (!response.ok) {
-      setBooking({
-        loading: false,
-        done: false,
-        error:
-          data.error ||
-          "Rezervacija nije uspjela.",
+        }),
       });
-      return;
-    }
 
-    setBooking({
-      loading: false,
-      done: true,
-      error: "",
-    });
+      const data = await response.json().catch(() => ({}));
 
-    // Smanji broj slobodnih mjesta na ekranu
-    setTour((current) => {
-      if (!current) return current;
+      if (response.status === 401) {
+        router.push("/login");
+        return;
+      }
 
-      return {
-        ...current,
+      if (!response.ok) {
+        setBooking({ loading: false, done: false, error: data.error || "Rezervacija nije uspjela." });
+        return;
+      }
 
-        departures: current.departures.map(
-          (departure) =>
+      setBooking({ loading: false, done: true, error: "" });
+
+      setTour((current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          departures: current.departures.map((departure) =>
             departure.id === selectedDepartureId
-              ? {
-                  ...departure,
-                  spotsLeft:
-                    departure.spotsLeft - count,
-                }
+              ? { ...departure, spotsLeft: departure.spotsLeft - count }
               : departure
-        ),
-      };
-    });
-  } catch {
-    setBooking({
-      loading: false,
-      done: false,
-      error:
-        "Došlo je do greške. Pokušajte ponovo.",
-    });
-  }
-}
-      return;
+          ),
+        };
+      });
+    } catch {
+      setBooking({ loading: false, done: false, error: "Došlo je do greške. Pokušajte ponovo." });
     }
-
-    setCurrentImage(
-      (current) =>
-        current ===
-        images.length - 1
-          ? 0
-          : current + 1
-    );
   }
 
   return (
