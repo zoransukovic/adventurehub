@@ -538,6 +538,65 @@ async function saveFeaturedOrder(
   }
 }
 
+
+  async function deleteTour(
+    tour: AdminTour
+  ) {
+    const confirmed = window.confirm(
+      `Trajno izbrisati turu "${tour.title}"?\n\nOvu radnju nije moguće poništiti.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setTourError(null);
+    setSavingTourId(tour.id);
+
+    try {
+      const res = await fetch(
+        `/api/admin/tours/${tour.id}`,
+        { method: "DELETE" }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setTourError(
+          data.error || "Greška pri brisanju ture."
+        );
+        return;
+      }
+
+      setTours((current) =>
+        current.filter((item) => item.id !== tour.id)
+      );
+
+      setOrderDrafts((current) => {
+        const next = { ...current };
+        delete next[tour.id];
+        return next;
+      });
+
+      setSavedOrders((current) => {
+        const next = { ...current };
+        delete next[tour.id];
+        return next;
+      });
+
+      setStats((current) =>
+        current
+          ? { ...current, tours: Math.max(0, current.tours - 1) }
+          : current
+      );
+    } catch (error) {
+      console.error("Greška pri brisanju ture:", error);
+      setTourError("Greška pri povezivanju sa serverom.");
+    } finally {
+      setSavingTourId(null);
+    }
+  }
+
   const STATUS_STYLE: Record<
     string,
     string
@@ -1127,6 +1186,17 @@ async function saveFeaturedOrder(
 </button>
                             </div>
                           )}
+                        </div>
+
+                        <div className="mt-3 border-t border-black/5 pt-3">
+                          <button
+                            type="button"
+                            disabled={saving}
+                            onClick={() => deleteTour(tour)}
+                            className="rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-700 transition hover:bg-red-100 disabled:opacity-50"
+                          >
+                            {saving ? "Brisanje..." : "🗑 Izbriši turu"}
+                          </button>
                         </div>
                       </div>
                     </div>
