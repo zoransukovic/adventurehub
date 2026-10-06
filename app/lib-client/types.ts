@@ -14,11 +14,24 @@ export type TourRoutePoint = {
 export type TourListItem = {
   id: string;
   title: string;
+
   pricePerPerson: number;
   maxParticipants: number;
 
   difficulty: string;
   transportMode: string;
+
+  /*
+   * Administratorski prioritet
+   */
+  featured: boolean;
+  featuredOrder: number | null;
+
+  /*
+   * Koristi se za sortiranje
+   * "Najnovije".
+   */
+  createdAt: string;
 
   activityType: ActivityType;
 
@@ -28,10 +41,6 @@ export type TourListItem = {
     guideCertified: boolean;
   };
 
-  /*
-   * Kompletni podaci rute.
-   * Koriste ih Dashboard i ToursMap.
-   */
   route: {
     startLat: number;
     startLng: number;
@@ -49,10 +58,6 @@ export type TourListItem = {
     estimatedMins: number | null;
   } | null;
 
-  /*
-   * Fotografije su sortirane:
-   * position 0 = naslovna.
-   */
   images: {
     id: string;
     url: string;
@@ -79,5 +84,7 @@ export type CurrentUser = {
     | "GUIDE"
     | "ADMIN";
 
-  guideStatus: string | null;
+  guideStatus:
+    | string
+    | null;
 } | null;
