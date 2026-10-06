@@ -786,10 +786,10 @@ const [booking, setBooking] = useState<{
   </h2>
 
   <div className="h-[320px] overflow-hidden rounded-2xl border border-black/10 sm:h-[400px]">
-    <TourDetailMap
-      route={tour.route}
-      title={tour.title}
-    />
+<TourDetailMap
+  route={tour.route!}
+  title={tour.title}
+/>
   </div>
 </div>
             <h2 className="text-base font-semibold">
