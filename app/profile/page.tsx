@@ -21,21 +21,32 @@ type Booking = {
   status: string;
   totalPrice: number;
   participants: number;
+
   tour: {
     id: string;
     title: string;
-    activityType: { name: string };
+
+    activityType: {
+      name: string;
+    };
+
     guide: {
       id: string;
       fullName: string;
     };
   };
+
   departure: {
+    id: string;
     startsAt: string;
     bookingDeadline: string | null;
     spotsLeft: number;
   };
-  review: { id: string } | null;
+
+  review: {
+    id: string;
+  } | null;
+
   participantsInfo: {
     id: string;
     fullName: string;
@@ -43,12 +54,7 @@ type Booking = {
   }[];
 };
 
-departure: {
-  id: string;
-  startsAt: string;
-  bookingDeadline: string | null;
-  spotsLeft: number;
-};
+type GuideBooking = {
 
 type GuideBooking = {
   id: string;
