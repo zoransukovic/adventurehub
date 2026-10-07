@@ -43,6 +43,13 @@ type Booking = {
   }[];
 };
 
+departure: {
+  id: string;
+  startsAt: string;
+  bookingDeadline: string | null;
+  spotsLeft: number;
+};
+
 type GuideBooking = {
   id: string;
   participants: number;
