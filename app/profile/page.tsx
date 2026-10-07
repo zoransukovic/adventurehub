@@ -55,8 +55,6 @@ type Booking = {
 };
 
 type GuideBooking = {
-
-type GuideBooking = {
   id: string;
   participants: number;
   status: string;
