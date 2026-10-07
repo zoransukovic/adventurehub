@@ -1,17 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   MapContainer,
   TileLayer,
   Marker,
   Popup,
   Polyline,
+  Circle,
   useMap,
 } from "react-leaflet";
 
 import L from "leaflet";
-
 import "leaflet/dist/leaflet.css";
 
 import type {
@@ -30,6 +30,7 @@ type UserLocation = {
   lat: number;
   lng: number;
   accuracy: number;
+  speedKmh: number | null;
 };
 
 /*
@@ -64,7 +65,7 @@ const tourIcon = L.divIcon({
 });
 
 /*
- * Marker trenutne lokacije korisnika.
+ * Plava tačka trenutne lokacije.
  */
 const userLocationIcon = L.divIcon({
   className: "",
@@ -82,12 +83,11 @@ const userLocationIcon = L.divIcon({
   `,
   iconSize: [22, 22],
   iconAnchor: [11, 11],
-  popupAnchor: [0, -14],
+  popupAnchor: [0, -15],
 });
 
 /*
- * Automatski prilagođava mapu tako
- * da sve ture budu vidljive.
+ * Automatski prikaz svih tura.
  */
 function FitTours({
   tours,
@@ -97,7 +97,7 @@ function FitTours({
   const map = useMap();
 
   useEffect(() => {
-    const toursWithRoute = tours.filter(
+    const validTours = tours.filter(
       (tour) =>
         tour.route &&
         Number.isFinite(
@@ -108,17 +108,13 @@ function FitTours({
         )
     );
 
-    if (
-      toursWithRoute.length === 0
-    ) {
+    if (validTours.length === 0) {
       return;
     }
 
-    if (
-      toursWithRoute.length === 1
-    ) {
+    if (validTours.length === 1) {
       const route =
-        toursWithRoute[0].route;
+        validTours[0].route;
 
       if (!route) return;
 
@@ -135,7 +131,7 @@ function FitTours({
 
     const bounds =
       L.latLngBounds(
-        toursWithRoute.map(
+        validTours.map(
           (tour) => [
             tour.route!.startLat,
             tour.route!.startLng,
@@ -154,10 +150,18 @@ function FitTours({
 }
 
 /*
- * Dugme za trenutnu lokaciju.
+ * GPS kontrola.
  *
- * Mora biti unutar MapContainer-a
- * da bismo mogli koristiti useMap().
+ * Prvi klik:
+ * - uključuje live praćenje
+ * - centrira mapu
+ *
+ * Dok je praćenje uključeno:
+ * - lokacija se osvježava
+ * - mapa prati korisnika
+ *
+ * Drugi klik:
+ * - isključuje praćenje
  */
 function LocationControl({
   onLocation,
@@ -168,13 +172,50 @@ function LocationControl({
 }) {
   const map = useMap();
 
+  const watchId =
+    useRef<number | null>(null);
+
+  const [tracking, setTracking] =
+    useState(false);
+
   const [locating, setLocating] =
     useState(false);
 
   const [error, setError] =
     useState<string | null>(null);
 
-  function locateMe() {
+  /*
+   * Zaustavljanje GPS praćenja
+   * kada se komponenta ukloni.
+   */
+  useEffect(() => {
+    return () => {
+      if (
+        watchId.current !== null
+      ) {
+        navigator.geolocation.clearWatch(
+          watchId.current
+        );
+      }
+    };
+  }, []);
+
+  function stopTracking() {
+    if (
+      watchId.current !== null
+    ) {
+      navigator.geolocation.clearWatch(
+        watchId.current
+      );
+
+      watchId.current = null;
+    }
+
+    setTracking(false);
+    setLocating(false);
+  }
+
+  function startTracking() {
     setError(null);
 
     if (
@@ -183,81 +224,109 @@ function LocationControl({
       setError(
         "Ovaj uređaj ne podržava određivanje lokacije."
       );
+
       return;
     }
 
     setLocating(true);
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const location = {
-          lat:
-            position.coords.latitude,
-          lng:
-            position.coords.longitude,
-          accuracy:
-            position.coords.accuracy,
-        };
+    watchId.current =
+      navigator.geolocation.watchPosition(
+        (position) => {
+          const speed =
+            position.coords.speed;
 
-        onLocation(location);
+          const location: UserLocation =
+            {
+              lat:
+                position.coords
+                  .latitude,
 
-        /*
-         * Centriramo mapu na korisnika.
-         */
-        map.flyTo(
-          [
-            location.lat,
-            location.lng,
-          ],
-          16,
-          {
-            animate: true,
-            duration: 1,
+              lng:
+                position.coords
+                  .longitude,
+
+              accuracy:
+                position.coords
+                  .accuracy,
+
+              speedKmh:
+                speed !== null
+                  ? speed * 3.6
+                  : null,
+            };
+
+          onLocation(location);
+
+          /*
+           * Dok je GPS aktivan,
+           * mapa prati korisnika.
+           */
+          map.setView(
+            [
+              location.lat,
+              location.lng,
+            ],
+            Math.max(
+              map.getZoom(),
+              16
+            ),
+            {
+              animate: true,
+            }
+          );
+
+          setLocating(false);
+          setTracking(true);
+        },
+
+        (geoError) => {
+          console.error(
+            "Geolocation error:",
+            geoError
+          );
+
+          if (
+            geoError.code === 1
+          ) {
+            setError(
+              "Pristup lokaciji nije dozvoljen."
+            );
+          } else if (
+            geoError.code === 2
+          ) {
+            setError(
+              "Trenutna lokacija nije dostupna."
+            );
+          } else if (
+            geoError.code === 3
+          ) {
+            setError(
+              "Određivanje lokacije traje predugo."
+            );
+          } else {
+            setError(
+              "Nije moguće odrediti lokaciju."
+            );
           }
-        );
 
-        setLocating(false);
-      },
+          stopTracking();
+        },
 
-      (geoError) => {
-        console.error(
-          "Geolocation error:",
-          geoError
-        );
-
-        if (
-          geoError.code === 1
-        ) {
-          setError(
-            "Pristup lokaciji nije dozvoljen."
-          );
-        } else if (
-          geoError.code === 2
-        ) {
-          setError(
-            "Trenutna lokacija nije dostupna."
-          );
-        } else if (
-          geoError.code === 3
-        ) {
-          setError(
-            "Određivanje lokacije traje predugo. Pokušajte ponovo."
-          );
-        } else {
-          setError(
-            "Nije moguće odrediti lokaciju."
-          );
+        {
+          enableHighAccuracy: true,
+          timeout: 20000,
+          maximumAge: 5000,
         }
+      );
+  }
 
-        setLocating(false);
-      },
-
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 30000,
-      }
-    );
+  function toggleTracking() {
+    if (tracking) {
+      stopTracking();
+    } else {
+      startTracking();
+    }
   }
 
   return (
@@ -272,31 +341,65 @@ function LocationControl({
       >
         <button
           type="button"
-          onClick={locateMe}
-          disabled={locating}
-          title="Moja lokacija"
-          aria-label="Moja lokacija"
+          onClick={toggleTracking}
+          title={
+            tracking
+              ? "Isključi praćenje"
+              : "Moja lokacija"
+          }
+          aria-label={
+            tracking
+              ? "Isključi praćenje"
+              : "Moja lokacija"
+          }
           style={{
-            width: "46px",
-            height: "46px",
+            width: "48px",
+            height: "48px",
             borderRadius: "50%",
-            border:
-              "1px solid rgba(0,0,0,.15)",
-            background: "white",
+            border: tracking
+              ? "2px solid #2563eb"
+              : "1px solid rgba(0,0,0,.15)",
+            background: tracking
+              ? "#eff6ff"
+              : "white",
             boxShadow:
               "0 2px 8px rgba(0,0,0,.25)",
             display: "flex",
             alignItems: "center",
-            justifyContent: "center",
-            cursor: locating
-              ? "wait"
-              : "pointer",
-            fontSize: "23px",
+            justifyContent:
+              "center",
+            cursor: "pointer",
+            fontSize: "24px",
             color: "#2563eb",
           }}
         >
-          {locating ? "…" : "➤"}
+          {locating
+            ? "…"
+            : tracking
+            ? "●"
+            : "➤"}
         </button>
+
+        {tracking && (
+          <div
+            style={{
+              marginTop: "5px",
+              padding: "3px 6px",
+              borderRadius: "6px",
+              background:
+                "rgba(255,255,255,.95)",
+              boxShadow:
+                "0 1px 5px rgba(0,0,0,.15)",
+              fontSize: "9px",
+              fontWeight: 600,
+              textAlign: "center",
+              color: "#2563eb",
+              whiteSpace: "nowrap",
+            }}
+          >
+            GPS AKTIVAN
+          </div>
+        )}
       </div>
 
       {error && (
@@ -304,14 +407,14 @@ function LocationControl({
           style={{
             position: "absolute",
             left: "50%",
-            bottom: "80px",
+            bottom: "90px",
             transform:
               "translateX(-50%)",
             zIndex: 1000,
             width: "max-content",
             maxWidth:
               "calc(100% - 32px)",
-            padding: "8px 12px",
+            padding: "9px 12px",
             borderRadius: "10px",
             background:
               "rgba(255,255,255,.97)",
@@ -333,7 +436,10 @@ export default function ToursMap({
   selectedTourId,
   onSelectTour,
 }: Props) {
-  const [userLocation, setUserLocation] =
+  const [
+    userLocation,
+    setUserLocation,
+  ] =
     useState<UserLocation | null>(
       null
     );
@@ -362,9 +468,6 @@ export default function ToursMap({
 
       <FitTours tours={tours} />
 
-      {/*
-       * Dugme "Moja lokacija".
-       */}
       <LocationControl
         onLocation={
           setUserLocation
@@ -372,7 +475,32 @@ export default function ToursMap({
       />
 
       {/*
-       * Trenutna lokacija korisnika.
+       * GPS preciznost.
+       *
+       * Providni krug pokazuje približno
+       * područje u kojem se korisnik nalazi.
+       */}
+      {userLocation && (
+        <Circle
+          center={[
+            userLocation.lat,
+            userLocation.lng,
+          ]}
+          radius={
+            userLocation.accuracy
+          }
+          pathOptions={{
+            color: "#2563eb",
+            fillColor:
+              "#2563eb",
+            fillOpacity: 0.08,
+            weight: 1,
+          }}
+        />
+      )}
+
+      {/*
+       * Trenutna lokacija.
        */}
       {userLocation && (
         <Marker
@@ -380,12 +508,15 @@ export default function ToursMap({
             userLocation.lat,
             userLocation.lng,
           ]}
-          icon={userLocationIcon}
+          icon={
+            userLocationIcon
+          }
           zIndexOffset={1000}
         >
           <Popup>
             <div
               style={{
+                minWidth: "140px",
                 textAlign: "center",
               }}
             >
@@ -401,19 +532,41 @@ export default function ToursMap({
                   color: "#666",
                 }}
               >
-                Preciznost približno{" "}
+                Preciznost: ±
                 {Math.round(
                   userLocation.accuracy
                 )}{" "}
                 m
               </span>
+
+              {userLocation.speedKmh !==
+                null && (
+                <>
+                  <br />
+
+                  <span
+                    style={{
+                      fontSize:
+                        "11px",
+                      color:
+                        "#666",
+                    }}
+                  >
+                    Brzina:{" "}
+                    {userLocation.speedKmh.toFixed(
+                      1
+                    )}{" "}
+                    km/h
+                  </span>
+                </>
+              )}
             </div>
           </Popup>
         </Marker>
       )}
 
       {/*
-       * Rute svih tura.
+       * Rute tura.
        */}
       {tours.map((tour) => {
         if (
@@ -475,7 +628,7 @@ export default function ToursMap({
       })}
 
       {/*
-       * Početne tačke tura.
+       * Markeri početnih tačaka tura.
        */}
       {tours.map((tour) => {
         if (!tour.route) {
