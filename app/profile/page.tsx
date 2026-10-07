@@ -107,7 +107,12 @@ export default function ProfilePage() {
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [groupOpeningDepartureId, setGroupOpeningDepartureId] = useState<string | null>(null);
   const [groupMessageError, setGroupMessageError] = useState<string | null>(null);
+const [trackingStartingBookingId, setTrackingStartingBookingId] =
+  useState<string | null>(null);
 
+const [trackingError, setTrackingError] =
+  useState<string | null>(null);
+  
   useEffect(() => {
     async function loadProfile() {
       try {
@@ -389,6 +394,49 @@ export default function ProfilePage() {
     }
   }
 
+async function startTracking(booking: Booking) {
+  setTrackingError(null);
+  setTrackingStartingBookingId(booking.id);
+
+  try {
+    const res = await fetch("/api/tracking/start", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        departureId: booking.departure.id,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      setTrackingError(
+        data.error || "Pokretanje ture nije uspjelo."
+      );
+      return;
+    }
+
+    if (!data.session?.id) {
+      setTrackingError(
+        "Tracking sesija nije pronađena."
+      );
+      return;
+    }
+
+    router.push(`/tracking/${data.session.id}`);
+  } catch (error) {
+    console.error("Tracking start error:", error);
+
+    setTrackingError(
+      "Došlo je do greške pri pokretanju ture."
+    );
+  } finally {
+    setTrackingStartingBookingId(null);
+  }
+}
+  
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
@@ -614,12 +662,31 @@ export default function ProfilePage() {
                     <p className="mt-2 text-sm text-red-600">{cancelError}</p>
                   )}
 
+{trackingError && trackingStartingBookingId === null && (
+  <p className="mt-2 text-sm text-red-600">
+    {trackingError}
+  </p>
+)}
+                  
                   {!editing && (
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Link
                         href={`/tours/${b.tour.id}`}
                         className="flex-1 rounded-lg border border-black/10 py-2 text-center text-xs text-foreground/60"
                       >
+                        {["PENDING", "CONFIRMED"].includes(b.status) && (
+  <button
+    type="button"
+    disabled={trackingStartingBookingId === b.id}
+    onClick={() => startTracking(b)}
+    className="w-full rounded-lg bg-brand py-2.5 text-xs font-medium text-white disabled:opacity-50"
+  >
+    {trackingStartingBookingId === b.id
+      ? "Pokretanje..."
+      : "▶ Započni turu"}
+  </button>
+)}
+                        
                         Pogledaj turu
                       </Link>
                       <Link
