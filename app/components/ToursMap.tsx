@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -26,11 +26,14 @@ type Props = {
   ) => void;
 };
 
+type UserLocation = {
+  lat: number;
+  lng: number;
+  accuracy: number;
+};
+
 /*
- * Leaflet marker ikonice ponekad nijesu
- * pravilno pronađene kroz Next.js bundler.
- *
- * Zato koristimo jednostavan DivIcon.
+ * Marker ture.
  */
 const tourIcon = L.divIcon({
   className: "",
@@ -61,6 +64,28 @@ const tourIcon = L.divIcon({
 });
 
 /*
+ * Marker trenutne lokacije korisnika.
+ */
+const userLocationIcon = L.divIcon({
+  className: "",
+  html: `
+    <div style="
+      width:22px;
+      height:22px;
+      border-radius:50%;
+      background:#2563eb;
+      border:4px solid white;
+      box-shadow:
+        0 0 0 5px rgba(37,99,235,.20),
+        0 2px 8px rgba(0,0,0,.35);
+    "></div>
+  `,
+  iconSize: [22, 22],
+  iconAnchor: [11, 11],
+  popupAnchor: [0, -14],
+});
+
+/*
  * Automatski prilagođava mapu tako
  * da sve ture budu vidljive.
  */
@@ -75,19 +100,23 @@ function FitTours({
     const toursWithRoute = tours.filter(
       (tour) =>
         tour.route &&
-        Number.isFinite(tour.route.startLat) &&
-        Number.isFinite(tour.route.startLng)
+        Number.isFinite(
+          tour.route.startLat
+        ) &&
+        Number.isFinite(
+          tour.route.startLng
+        )
     );
 
-    if (toursWithRoute.length === 0) {
+    if (
+      toursWithRoute.length === 0
+    ) {
       return;
     }
 
-    /*
-     * Ako postoji samo jedna tura,
-     * centriramo mapu na početak njene rute.
-     */
-    if (toursWithRoute.length === 1) {
+    if (
+      toursWithRoute.length === 1
+    ) {
       const route =
         toursWithRoute[0].route;
 
@@ -104,16 +133,15 @@ function FitTours({
       return;
     }
 
-    /*
-     * Ako postoji više tura,
-     * mapa obuhvata njihove početne tačke.
-     */
-    const bounds = L.latLngBounds(
-      toursWithRoute.map((tour) => [
-        tour.route!.startLat,
-        tour.route!.startLng,
-      ])
-    );
+    const bounds =
+      L.latLngBounds(
+        toursWithRoute.map(
+          (tour) => [
+            tour.route!.startLat,
+            tour.route!.startLng,
+          ]
+        )
+      );
 
     if (bounds.isValid()) {
       map.fitBounds(bounds, {
@@ -125,17 +153,191 @@ function FitTours({
   return null;
 }
 
+/*
+ * Dugme za trenutnu lokaciju.
+ *
+ * Mora biti unutar MapContainer-a
+ * da bismo mogli koristiti useMap().
+ */
+function LocationControl({
+  onLocation,
+}: {
+  onLocation: (
+    location: UserLocation
+  ) => void;
+}) {
+  const map = useMap();
+
+  const [locating, setLocating] =
+    useState(false);
+
+  const [error, setError] =
+    useState<string | null>(null);
+
+  function locateMe() {
+    setError(null);
+
+    if (
+      !navigator.geolocation
+    ) {
+      setError(
+        "Ovaj uređaj ne podržava određivanje lokacije."
+      );
+      return;
+    }
+
+    setLocating(true);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const location = {
+          lat:
+            position.coords.latitude,
+          lng:
+            position.coords.longitude,
+          accuracy:
+            position.coords.accuracy,
+        };
+
+        onLocation(location);
+
+        /*
+         * Centriramo mapu na korisnika.
+         */
+        map.flyTo(
+          [
+            location.lat,
+            location.lng,
+          ],
+          16,
+          {
+            animate: true,
+            duration: 1,
+          }
+        );
+
+        setLocating(false);
+      },
+
+      (geoError) => {
+        console.error(
+          "Geolocation error:",
+          geoError
+        );
+
+        if (
+          geoError.code === 1
+        ) {
+          setError(
+            "Pristup lokaciji nije dozvoljen."
+          );
+        } else if (
+          geoError.code === 2
+        ) {
+          setError(
+            "Trenutna lokacija nije dostupna."
+          );
+        } else if (
+          geoError.code === 3
+        ) {
+          setError(
+            "Određivanje lokacije traje predugo. Pokušajte ponovo."
+          );
+        } else {
+          setError(
+            "Nije moguće odrediti lokaciju."
+          );
+        }
+
+        setLocating(false);
+      },
+
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 30000,
+      }
+    );
+  }
+
+  return (
+    <>
+      <div
+        style={{
+          position: "absolute",
+          right: "12px",
+          bottom: "24px",
+          zIndex: 1000,
+        }}
+      >
+        <button
+          type="button"
+          onClick={locateMe}
+          disabled={locating}
+          title="Moja lokacija"
+          aria-label="Moja lokacija"
+          style={{
+            width: "46px",
+            height: "46px",
+            borderRadius: "50%",
+            border:
+              "1px solid rgba(0,0,0,.15)",
+            background: "white",
+            boxShadow:
+              "0 2px 8px rgba(0,0,0,.25)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: locating
+              ? "wait"
+              : "pointer",
+            fontSize: "23px",
+            color: "#2563eb",
+          }}
+        >
+          {locating ? "…" : "➤"}
+        </button>
+      </div>
+
+      {error && (
+        <div
+          style={{
+            position: "absolute",
+            left: "50%",
+            bottom: "80px",
+            transform:
+              "translateX(-50%)",
+            zIndex: 1000,
+            width: "max-content",
+            maxWidth:
+              "calc(100% - 32px)",
+            padding: "8px 12px",
+            borderRadius: "10px",
+            background:
+              "rgba(255,255,255,.97)",
+            boxShadow:
+              "0 2px 10px rgba(0,0,0,.2)",
+            fontSize: "12px",
+            textAlign: "center",
+          }}
+        >
+          {error}
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function ToursMap({
   tours,
   selectedTourId,
   onSelectTour,
 }: Props) {
-  /*
-   * Početni centar je Crna Gora.
-   *
-   * FitTours će nakon učitavanja
-   * automatski podesiti prikaz prema turama.
-   */
+  const [userLocation, setUserLocation] =
+    useState<UserLocation | null>(
+      null
+    );
+
   const defaultCenter:
     [number, number] = [
       42.7,
@@ -154,20 +356,69 @@ export default function ToursMap({
       }}
     >
       <TileLayer
-        attribution='&copy; OpenStreetMap contributors'
+        attribution="&copy; OpenStreetMap contributors"
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
 
       <FitTours tours={tours} />
 
       {/*
-       * Crtamo rutu ZA SVAKU turu
-       * koja ima najmanje dvije validne tačke.
-       *
-       * Izabrana tura ima deblju liniju.
+       * Dugme "Moja lokacija".
+       */}
+      <LocationControl
+        onLocation={
+          setUserLocation
+        }
+      />
+
+      {/*
+       * Trenutna lokacija korisnika.
+       */}
+      {userLocation && (
+        <Marker
+          position={[
+            userLocation.lat,
+            userLocation.lng,
+          ]}
+          icon={userLocationIcon}
+          zIndexOffset={1000}
+        >
+          <Popup>
+            <div
+              style={{
+                textAlign: "center",
+              }}
+            >
+              <strong>
+                Moja lokacija
+              </strong>
+
+              <br />
+
+              <span
+                style={{
+                  fontSize: "11px",
+                  color: "#666",
+                }}
+              >
+                Preciznost približno{" "}
+                {Math.round(
+                  userLocation.accuracy
+                )}{" "}
+                m
+              </span>
+            </div>
+          </Popup>
+        </Marker>
+      )}
+
+      {/*
+       * Rute svih tura.
        */}
       {tours.map((tour) => {
-        if (!tour.route?.points) {
+        if (
+          !tour.route?.points
+        ) {
           return null;
         }
 
@@ -193,12 +444,15 @@ export default function ToursMap({
                 ]
             );
 
-        if (points.length < 2) {
+        if (
+          points.length < 2
+        ) {
           return null;
         }
 
         const isSelected =
-          tour.id === selectedTourId;
+          tour.id ===
+          selectedTourId;
 
         return (
           <Polyline
@@ -221,7 +475,7 @@ export default function ToursMap({
       })}
 
       {/*
-       * Marker početne tačke svake ture.
+       * Početne tačke tura.
        */}
       {tours.map((tour) => {
         if (!tour.route) {
@@ -275,7 +529,9 @@ export default function ToursMap({
 
                 <span>
                   €
-                  {tour.pricePerPerson}{" "}
+                  {
+                    tour.pricePerPerson
+                  }{" "}
                   po osobi
                 </span>
               </div>
