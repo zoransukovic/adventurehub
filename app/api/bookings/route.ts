@@ -40,16 +40,22 @@ export async function GET(req: NextRequest) {
     },
 
     include: {
-      tour: {
-        select: {
-          id: true,
-          title: true,
-          pricePerPerson: true,
+   tour: {
+  select: {
+    id: true,
+    title: true,
+    pricePerPerson: true,
 
-          activityType: true,
-        },
+    activityType: true,
+
+    guide: {
+      select: {
+        id: true,
+        fullName: true,
       },
-
+    },
+  },
+},
       departure: true,
 
       review: {
