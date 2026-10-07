@@ -25,6 +25,10 @@ type Booking = {
     id: string;
     title: string;
     activityType: { name: string };
+    guide: {
+      id: string;
+      fullName: string;
+    };
   };
   departure: {
     startsAt: string;
@@ -575,6 +579,12 @@ export default function ProfilePage() {
                         className="flex-1 rounded-lg border border-black/10 py-2 text-center text-xs text-foreground/60"
                       >
                         Pogledaj turu
+                      </Link>
+                      <Link
+                        href={`/messages/new?recipientId=${b.tour.guide.id}`}
+                        className="flex-1 rounded-lg border border-brand/20 bg-brand-light/40 py-2 text-center text-xs font-medium text-brand-dark"
+                      >
+                        💬 Kontaktiraj vodiča
                       </Link>
                       {editable && (
                         <button
