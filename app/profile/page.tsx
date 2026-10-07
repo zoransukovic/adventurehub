@@ -814,18 +814,33 @@ async function startTracking(booking: Booking) {
                             Prijavljeni učesnici
                           </p>
 
-                          {departure.bookings.length > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => openGroupConversation(departure.id)}
-                              disabled={groupOpeningDepartureId === departure.id}
-                              className="rounded-lg bg-brand px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
-                            >
-                              {groupOpeningDepartureId === departure.id
-                                ? "Otvaranje..."
-                                : `💬 Poruka svima (${departure.bookings.length})`}
-                            </button>
-                          )}
+{departure.bookings.length > 0 && (
+  <div className="flex flex-wrap gap-2">
+    <Link
+      href={`/guide/live/${departure.id}`}
+      className="rounded-lg border border-brand/20 bg-brand-light px-3 py-2 text-xs font-medium text-brand-dark"
+    >
+      📍 Live učesnici
+    </Link>
+
+    <button
+      type="button"
+      onClick={() =>
+        openGroupConversation(departure.id)
+      }
+      disabled={
+        groupOpeningDepartureId ===
+        departure.id
+      }
+      className="rounded-lg bg-brand px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
+    >
+      {groupOpeningDepartureId ===
+      departure.id
+        ? "Otvaranje..."
+        : `💬 Poruka svima (${departure.bookings.length})`}
+    </button>
+  </div>
+)}
                         </div>
 
                         {departure.bookings.length === 0 ? (
