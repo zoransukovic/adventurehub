@@ -275,13 +275,15 @@ model TrackingPoint {
 }
 
 model Conversation {
-  id           String                    @id @default(cuid())
-  type         ConversationType          @default(DIRECT)
-  tourId       String?
-  createdAt    DateTime                  @default(now())
+  id String @id @default(cuid())
+  type ConversationType @default(DIRECT)
+  tourId String?
+  departureId String?
+  createdAt DateTime @default(now())
   participants ConversationParticipant[]
-  messages     Message[]
+  messages Message[]
 
+  @@index([departureId])
   @@map("conversations")
 }
 
