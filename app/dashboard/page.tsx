@@ -651,11 +651,14 @@ export default function DashboardPage() {
               }
 
               return (
-                <Link
+                <div
                   key={tour.id}
-                  href={`/tours/${tour.id}`}
-                  className="block overflow-hidden rounded-2xl border border-black/8 bg-white shadow-sm transition hover:shadow-md"
+                  className="overflow-hidden rounded-2xl border border-black/8 bg-white shadow-sm transition hover:shadow-md"
                 >
+                  <Link
+                    href={`/tours/${tour.id}`}
+                    className="block"
+                  >
                   {/* FOTOGRAFIJA */}
                   <div className="relative aspect-[3/2] w-full overflow-hidden bg-brand-light">
                     {coverImage ? (
@@ -791,7 +794,24 @@ export default function DashboardPage() {
                       po osobi
                     </div>
                   </div>
-                </Link>
+                  </Link>
+
+                  <div className="flex gap-2 border-t border-black/8 p-3">
+                    <Link
+                      href={`/tours/${tour.id}`}
+                      className="flex-1 rounded-xl border border-black/10 px-3 py-2.5 text-center text-sm font-medium text-foreground/70 transition hover:bg-black/[0.03]"
+                    >
+                      Pogledaj turu
+                    </Link>
+
+                    <Link
+                      href={`/messages/new?recipientId=${tour.guide.id}`}
+                      className="flex-1 rounded-xl border border-brand/20 bg-brand-light/40 px-3 py-2.5 text-center text-sm font-medium text-brand-dark transition hover:bg-brand-light"
+                    >
+                      💬 Kontaktiraj vodiča
+                    </Link>
+                  </div>
+                </div>
               );
             }
           )}
