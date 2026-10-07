@@ -94,6 +94,8 @@ export default function ProfilePage() {
   const [editError, setEditError] = useState<string | null>(null);
   const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(null);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [groupOpeningDepartureId, setGroupOpeningDepartureId] = useState<string | null>(null);
+  const [groupMessageError, setGroupMessageError] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadProfile() {
@@ -344,6 +346,35 @@ export default function ProfilePage() {
       );
     } finally {
       setCancellingBookingId(null);
+    }
+  }
+
+  async function openGroupConversation(departureId: string) {
+    setGroupMessageError(null);
+    setGroupOpeningDepartureId(departureId);
+
+    try {
+      const res = await fetch("/api/messages/group", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ departureId }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setGroupMessageError(
+          data.error || "Otvaranje grupnog razgovora nije uspjelo."
+        );
+        return;
+      }
+
+      router.push(`/messages/${data.conversationId}`);
+    } catch (error) {
+      console.error("Group conversation error:", error);
+      setGroupMessageError("Došlo je do greške pri otvaranju grupnog razgovora.");
+    } finally {
+      setGroupOpeningDepartureId(null);
     }
   }
 
@@ -700,9 +731,24 @@ export default function ProfilePage() {
                       </div>
 
                       <div className="mt-4 border-t border-black/8 pt-3">
-                        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-foreground/50">
-                          Prijavljeni učesnici
-                        </p>
+                        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-xs font-medium uppercase tracking-wide text-foreground/50">
+                            Prijavljeni učesnici
+                          </p>
+
+                          {departure.bookings.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => openGroupConversation(departure.id)}
+                              disabled={groupOpeningDepartureId === departure.id}
+                              className="rounded-lg bg-brand px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
+                            >
+                              {groupOpeningDepartureId === departure.id
+                                ? "Otvaranje..."
+                                : `💬 Poruka svima (${departure.bookings.length})`}
+                            </button>
+                          )}
+                        </div>
 
                         {departure.bookings.length === 0 ? (
                           <p className="py-3 text-sm text-foreground/40">
@@ -750,11 +796,24 @@ export default function ProfilePage() {
                                       {STATUS[booking.status] ??
                                         booking.status}
                                     </p>
+
+                                    <Link
+                                      href={`/messages/new?recipientId=${booking.user.id}`}
+                                      className="mt-2 inline-block rounded-lg border border-brand/20 bg-brand-light/40 px-3 py-2 text-xs font-medium text-brand-dark"
+                                    >
+                                      💬 Poruka
+                                    </Link>
                                   </div>
                                 </div>
                               </div>
                             ))}
                           </div>
+                        )}
+
+                        {groupMessageError && (
+                          <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+                            {groupMessageError}
+                          </p>
                         )}
 
                         <div className="mt-3 flex items-center justify-between border-t border-black/8 pt-3 text-sm">
