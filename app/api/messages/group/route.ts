@@ -5,17 +5,20 @@ import { guard } from "@/lib/guard";
 export async function POST(req: NextRequest) {
   try {
     const { error, session } = await guard("GUIDE");
+
     if (error) return error;
 
     const { departureId } = await req.json().catch(() => ({}));
 
-    if (!departureId || typeof departureId !== "string") {
+    if (!departureId) {
       return NextResponse.json(
         { error: "departureId je obavezan." },
         { status: 400 }
       );
     }
 
+    // Pronalazimo termin i provjeravamo da pripada turi
+    // trenutno prijavljenog vodiča.
     const departure = await prisma.tourDeparture.findFirst({
       where: {
         id: departureId,
@@ -23,9 +26,13 @@ export async function POST(req: NextRequest) {
           guideId: session!.userId,
         },
       },
-      select: {
-        id: true,
-        tourId: true,
+      include: {
+        tour: {
+          select: {
+            id: true,
+            title: true,
+          },
+        },
         bookings: {
           where: {
             status: {
@@ -41,14 +48,17 @@ export async function POST(req: NextRequest) {
 
     if (!departure) {
       return NextResponse.json(
-        { error: "Termin nije pronađen ili ne pripada ovom vodiču." },
+        { error: "Termin nije pronađen ili nemate pravo pristupa." },
         { status: 404 }
       );
     }
 
-    const touristIds = Array.from(
-      new Set(departure.bookings.map((booking) => booking.userId))
-    );
+    // Jedinstveni korisnici sa aktivnim rezervacijama.
+    const touristIds = [
+      ...new Set(
+        departure.bookings.map((booking) => booking.userId)
+      ),
+    ];
 
     if (touristIds.length === 0) {
       return NextResponse.json(
@@ -57,15 +67,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const participantIds = [session!.userId, ...touristIds];
+    const participantIds = [
+      session!.userId,
+      ...touristIds.filter((id) => id !== session!.userId),
+    ];
 
+    // Za svaki termin postoji najviše jedna GROUP konverzacija.
     let conversation = await prisma.conversation.findFirst({
       where: {
         type: "GROUP",
-        departureId: departure.id,
+        departureId,
       },
-      select: {
-        id: true,
+      include: {
+        participants: true,
       },
     });
 
@@ -73,57 +87,61 @@ export async function POST(req: NextRequest) {
       conversation = await prisma.conversation.create({
         data: {
           type: "GROUP",
-          tourId: departure.tourId,
-          departureId: departure.id,
+          tourId: departure.tour.id,
+          departureId,
           participants: {
-            create: participantIds.map((userId) => ({ userId })),
+            create: participantIds.map((userId) => ({
+              userId,
+            })),
           },
         },
-        select: {
-          id: true,
+        include: {
+          participants: true,
         },
       });
     } else {
-      await prisma.$transaction(async (tx) => {
-        await tx.conversationParticipant.deleteMany({
-          where: {
+      // Sinhronizuj članove grupe sa trenutnim aktivnim rezervacijama.
+      const existingIds = new Set(
+        conversation.participants.map((participant) => participant.userId)
+      );
+
+      const idsToAdd = participantIds.filter(
+        (id) => !existingIds.has(id)
+      );
+
+      if (idsToAdd.length > 0) {
+        await prisma.conversationParticipant.createMany({
+          data: idsToAdd.map((userId) => ({
             conversationId: conversation!.id,
-            userId: {
-              notIn: participantIds,
-            },
-          },
+            userId,
+          })),
+          skipDuplicates: true,
         });
+      }
 
-        const existingParticipants = await tx.conversationParticipant.findMany({
-          where: {
-            conversationId: conversation!.id,
+      // Ukloni korisnike koji više nemaju aktivnu rezervaciju.
+      await prisma.conversationParticipant.deleteMany({
+        where: {
+          conversationId: conversation.id,
+          userId: {
+            notIn: participantIds,
           },
-          select: {
-            userId: true,
-          },
-        });
-
-        const existingIds = new Set(
-          existingParticipants.map((participant) => participant.userId)
-        );
-
-        const missingIds = participantIds.filter(
-          (userId) => !existingIds.has(userId)
-        );
-
-        if (missingIds.length > 0) {
-          await tx.conversationParticipant.createMany({
-            data: missingIds.map((userId) => ({
-              conversationId: conversation!.id,
-              userId,
-            })),
-            skipDuplicates: true,
-          });
-        }
+        },
       });
     }
 
     return NextResponse.json({
       conversationId: conversation.id,
+      tourId: departure.tour.id,
+      departureId,
+      participantsCount: participantIds.length,
     });
+  } catch (error) {
+    console.error("Group conversation error:", error);
 
+    return NextResponse.json(
+      { error: "Greška pri otvaranju grupnog razgovora." },
+      { status: 500 }
+    );
+  }
+}
